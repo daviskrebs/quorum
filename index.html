@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Light Up the Hood – Bellevue</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:#FFFDF5;color:#1A1A1A;min-height:100vh;}
+  .app{max-width:480px;margin:0 auto;padding:0 0 80px;}
+  .header{background:#1B4332;padding:20px 16px 16px;text-align:center;position:relative;overflow:hidden;}
+  .header::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 10px,rgba(255,255,255,0.02) 10px,rgba(255,255,255,0.02) 20px);}
+  .header-lights{display:flex;justify-content:center;gap:8px;margin-bottom:8px;position:relative;z-index:1;}
+  .bulb{width:12px;height:16px;border-radius:2px 2px 50% 50%;animation:glow 1.5s ease-in-out infinite alternate;}
+  .bulb:nth-child(1){background:#E63946;animation-delay:0s;} .bulb:nth-child(2){background:#F4A261;animation-delay:.2s;}
+  .bulb:nth-child(3){background:#2DC653;animation-delay:.4s;} .bulb:nth-child(4){background:#4CC9F0;animation-delay:.6s;}
+  .bulb:nth-child(5){background:#E63946;animation-delay:.8s;} .bulb:nth-child(6){background:#F4A261;animation-delay:1s;}
+  .bulb:nth-child(7){background:#2DC653;animation-delay:1.2s;}
+  @keyframes glow{from{opacity:0.5}to{opacity:1;box-shadow:0 0 8px currentColor}}
+  .header h1{font-family:'Playfair Display',serif;color:#F5DFA0;font-size:22px;line-height:1.2;position:relative;z-index:1;}
+  .header p{color:rgba(255,255,255,0.7);font-size:12px;margin-top:4px;position:relative;z-index:1;}
+  .judge-badge{background:rgba(200,151,58,0.2);border:1px solid rgba(200,151,58,0.3);border-radius:20px;padding:4px 12px;font-size:12px;color:#F5DFA0;margin-top:8px;display:inline-block;position:relative;z-index:1;}
+  .nav-tabs{display:flex;background:#1B4332;border-top:1px solid rgba(255,255,255,0.1);}
+  .nav-tab{flex:1;padding:10px 4px;text-align:center;font-size:11px;color:rgba(255,255,255,0.6);cursor:pointer;border:none;background:none;transition:all .2s;}
+  .nav-tab.active{color:#F5DFA0;border-bottom:2px solid #C8973A;}
+  .screen{display:none;padding:16px;} .screen.active{display:block;}
+  .card{background:#fff;border:1px solid rgba(200,151,58,0.3);border-radius:12px;padding:16px;margin-bottom:12px;}
+  .card-title{font-family:'Playfair Display',serif;font-size:16px;color:#1B4332;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+  label{font-size:13px;color:#555;margin-bottom:4px;display:block;font-weight:500;}
+  .combo{position:relative;margin-bottom:12px;}
+  .combo-input{width:100%;padding:10px 32px 10px 12px;border:1px solid #ddd;border-radius:8px;font-size:15px;font-family:'DM Sans',sans-serif;background:#fff;color:#1A1A1A;outline:none;}
+  .combo-input:focus{border-color:#1B4332;}
+  .combo-input.disabled{background:#f5f5f5;color:#aaa;pointer-events:none;}
+  .combo-arrow{position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:#888;font-size:11px;}
+  .combo-clear{position:absolute;right:28px;top:50%;transform:translateY(-50%);cursor:pointer;color:#aaa;font-size:16px;line-height:1;display:none;background:none;border:none;padding:0 2px;}
+  .combo-dropdown{position:absolute;top:calc(100% + 2px);left:0;right:0;background:#fff;border:1px solid #ddd;border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1);}
+  .combo-dropdown.open{display:block;}
+  .combo-group{padding:6px 10px 2px;font-size:11px;font-weight:500;color:#aaa;text-transform:uppercase;letter-spacing:.05em;}
+  .combo-option{padding:10px 12px;font-size:14px;cursor:pointer;border-bottom:1px solid #f5f5f5;}
+  .combo-option:last-child{border-bottom:none;}
+  .combo-option:hover,.combo-option.highlighted{background:#D8F3DC;color:#1B4332;}
+  .combo-option mark{background:none;color:#C8973A;font-weight:500;}
+  .combo-empty{padding:12px;font-size:13px;color:#aaa;text-align:center;}
+  input[type=text],textarea{width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:15px;font-family:'DM Sans',sans-serif;background:#fff;color:#1A1A1A;outline:none;margin-bottom:12px;}
+  input[type=text]:focus,textarea:focus{border-color:#1B4332;}
+  textarea{resize:vertical;min-height:60px;margin-bottom:0;}
+  .score-group{margin-bottom:16px;}
+  .score-label{font-size:13px;font-weight:500;color:#333;margin-bottom:4px;}
+  .score-desc{font-size:11px;color:#888;margin-bottom:8px;}
+  .stars{display:flex;gap:6px;}
+  .star{width:36px;height:36px;border:none;background:none;font-size:24px;cursor:pointer;transition:transform .1s;color:#ddd;padding:0;line-height:1;}
+  .star.active{color:#F4A261;} .star:hover{transform:scale(1.2);}
+  .photo-zone{border:2px dashed #ddd;border-radius:8px;padding:16px;text-align:center;cursor:pointer;transition:border-color .2s;margin-bottom:12px;position:relative;}
+  .photo-zone:hover{border-color:#1B4332;}
+  .photo-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+  .photo-zone p{font-size:13px;color:#aaa;margin-top:4px;}
+  .photo-preview{position:relative;margin-bottom:12px;}
+  .photo-preview img{width:100%;border-radius:8px;max-height:180px;object-fit:cover;display:block;}
+  .photo-remove{position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.55);color:#fff;border:none;border-radius:50%;width:24px;height:24px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;}
+  .btn{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s;margin-top:4px;}
+  .btn-primary{background:#1B4332;color:#fff;} .btn-primary:hover{background:#2D6A4F;} .btn-primary:active{transform:scale(0.98);}
+  .btn-secondary{background:transparent;color:#1B4332;border:1px solid #1B4332;}
+  .btn-gold{background:#C8973A;color:#fff;}
+  .btn-danger{background:#8B1A1A;color:#fff;margin-top:8px;}
+  .vote-list{max-height:340px;overflow-y:auto;}
+  .vote-item{padding:10px 12px;border-bottom:1px solid #f0f0f0;font-size:13px;display:flex;gap:10px;align-items:center;}
+  .vote-item:last-child{border-bottom:none;}
+  .vote-thumb{width:48px;height:48px;border-radius:6px;object-fit:cover;flex-shrink:0;}
+  .vote-thumb-placeholder{width:48px;height:48px;border-radius:6px;background:#f0f0f0;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;}
+  .vote-addr{font-weight:500;}
+  .empty-state{text-align:center;padding:32px 16px;color:#aaa;font-size:14px;}
+  .alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;}
+  .alert-warn{background:#FFF3CD;color:#7A5A00;border:1px solid #F4D03F;}
+  .alert-success{background:#D4EDDA;color:#155724;border:1px solid #C3E6CB;}
+  .alert-info{background:#D8F3DC;color:#1B4332;border:1px solid rgba(27,67,50,0.2);}
+  .cat-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500;}
+  .cat-wonderful{background:#FDE8E8;color:#8B1A1A;} .cat-anything{background:#E8F4FD;color:#1A4A7A;}
+  .cat-tree{background:#E8FDE8;color:#1A5C1A;} .cat-doors{background:#FDF5E8;color:#7A5A00;}
+  .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
+  .stat-card{background:#D8F3DC;border-radius:8px;padding:12px;text-align:center;}
+  .stat-num{font-size:24px;font-weight:700;color:#1B4332;font-family:'Playfair Display',serif;}
+  .stat-label{font-size:11px;color:#2D6A4F;margin-top:2px;}
+  .pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;display:inline-block;}
+  .pill-green{background:#D8F3DC;color:#1B4332;}
+  .divider{border:none;border-top:1px solid #eee;margin:12px 0;}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="header-lights">
+      <div class="bulb"></div><div class="bulb"></div><div class="bulb"></div>
+      <div class="bulb"></div><div class="bulb"></div><div class="bulb"></div><div class="bulb"></div>
+    </div>
+    <h1>Light Up the Hood</h1>
+    <p>Bellevue Holiday Lights Contest &middot; Richmond, VA</p>
+    <div class="judge-badge" id="judge-badge">Judge ID: loading...</div>
+  </div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showScreen('vote')">Vote</button>
+    <button class="nav-tab" onclick="showScreen('my-votes')">My Votes</button>
+    <button class="nav-tab" onclick="showScreen('results')">Results</button>
+    <button class="nav-tab" onclick="showScreen('export')">Export</button>
+  </div>
+
+  <div id="screen-vote" class="screen active">
+    <div id="url-prefill-banner" style="display:none" class="alert alert-info">Host pre-filled this address. Confirm and score below.</div>
+    <div class="card">
+      <div class="card-title"><span>&#128205;</span> Address</div>
+      <label>Street</label>
+      <div class="combo" id="combo-street">
+        <input class="combo-input" id="street-input" type="text" placeholder="Type to search streets..." autocomplete="off">
+        <button class="combo-clear" id="street-clear" onclick="clearCombo('street')">&#215;</button>
+        <span class="combo-arrow">&#9662;</span>
+        <div class="combo-dropdown" id="street-dropdown"></div>
+      </div>
+      <label>House Number</label>
+      <div class="combo" id="combo-num">
+        <input class="combo-input disabled" id="num-input" type="text" placeholder="Select a street first..." autocomplete="off" disabled>
+        <button class="combo-clear" id="num-clear" onclick="clearCombo('num')" style="display:none">&#215;</button>
+        <span class="combo-arrow">&#9662;</span>
+        <div class="combo-dropdown" id="num-dropdown"></div>
+      </div>
+      <label>Category</label>
+      <div class="combo" id="combo-cat">
+        <input class="combo-input" id="cat-input" type="text" placeholder="Type or select category..." autocomplete="off">
+        <button class="combo-clear" id="cat-clear" onclick="clearCombo('cat')">&#215;</button>
+        <span class="combo-arrow">&#9662;</span>
+        <div class="combo-dropdown" id="cat-dropdown"></div>
+      </div>
+    </div>
+
+    <div id="scoring-card" style="display:none" class="card">
+      <div class="card-title"><span>&#11088;</span> Scoring</div>
+      <div id="duplicate-warn" style="display:none" class="alert alert-warn">You already voted for this address. Submitting will update your vote.</div>
+      <div class="score-group">
+        <div class="score-label">Curb Appeal</div>
+        <div class="score-desc">First impression &mdash; wow factor from the street</div>
+        <div class="stars" id="stars-curb"></div>
+      </div>
+      <div class="score-group">
+        <div class="score-label">Overall Presentation</div>
+        <div class="score-desc">Cohesion, effort, and execution</div>
+        <div class="stars" id="stars-overall"></div>
+      </div>
+      <div class="score-group" id="ag-group" style="display:none">
+        <div class="score-label">Unique Design <span class="pill pill-green">Anything Goes only</span></div>
+        <div class="score-desc">Creative use of lights and decorations</div>
+        <div class="stars" id="stars-unique"></div>
+      </div>
+      <label>Notes (optional)</label>
+      <textarea id="notes-input" placeholder="Any comments about this display..."></textarea>
+      <div style="margin-top:12px">
+        <label>Photo (optional)</label>
+        <div id="photo-preview-wrap" style="display:none" class="photo-preview">
+          <img id="photo-preview-img" src="" alt="preview">
+          <button class="photo-remove" onclick="removePhoto()">&#215;</button>
+        </div>
+        <div class="photo-zone" id="photo-zone">
+          <input type="file" accept="image/*" capture="environment" id="photo-input" onchange="handlePhoto(this)">
+          <div style="font-size:28px;">&#128247;</div>
+          <p>Tap to take a photo or upload</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="submit-area" style="display:none;padding:0 0 8px;">
+      <button class="btn btn-primary" onclick="submitVote()">Submit Vote</button>
+      <div id="submit-msg" style="display:none;margin-top:8px;" class="alert alert-success">Vote recorded!</div>
+    </div>
+
+    <hr class="divider">
+    <div style="padding:0 0 8px;">
+      <div class="card-title" style="font-size:14px;margin-bottom:8px;"><span>&#127919;</span> Host Mode</div>
+      <p style="font-size:12px;color:#666;margin-bottom:10px;">Select address and category above, then generate a pre-filled link to share with all judges.</p>
+      <button class="btn btn-secondary" style="font-size:14px;padding:10px;" onclick="generateHostLink()">Generate Shareable Link</button>
+      <div id="host-link-box" style="display:none;margin-top:10px;">
+        <div class="alert alert-info" style="word-break:break-all;font-size:12px;" id="host-link-text"></div>
+        <button class="btn btn-gold" style="font-size:13px;padding:8px;margin-top:6px;" onclick="copyHostLink()">Copy Link</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-my-votes" class="screen">
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-num" id="my-vote-count">0</div><div class="stat-label">My votes cast</div></div>
+      <div class="stat-card"><div class="stat-num" id="my-avg-score">&mdash;</div><div class="stat-label">Avg score given</div></div>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="vote-list" id="my-votes-list">
+        <div class="empty-state"><div style="font-size:32px;margin-bottom:8px;">&#127968;</div>No votes yet.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="screen-results" class="screen">
+    <div class="alert alert-info" style="margin-bottom:12px;">Live standings from all votes on this device.</div>
+    <div id="results-content"></div>
+  </div>
+
+  <div id="screen-export" class="screen">
+    <div class="card">
+      <div class="card-title"><span>&#128202;</span> Export Votes</div>
+      <p style="font-size:13px;color:#666;margin-bottom:14px;">Downloads a CSV with all votes from this device. Merge all judges' CSVs in Google Sheets to tabulate winners.</p>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-num" id="export-count">0</div><div class="stat-label">Votes to export</div></div>
+        <div class="stat-card"><div class="stat-num" id="export-houses">0</div><div class="stat-label">Unique addresses</div></div>
+      </div>
+      <button class="btn btn-primary" onclick="exportCSV()">Download CSV</button>
+      <button class="btn btn-danger" onclick="clearAllData()">Clear All Data</button>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>&#8505;&#65039;</span> About This Device</div>
+      <p style="font-size:13px;color:#666;">Each judge exports their own CSV after judging. Send all CSVs to the organizer to merge and determine winners.</p>
+      <p style="font-size:12px;color:#aaa;margin-top:8px;">Judge ID: <strong id="judge-id-display"></strong></p>
+    </div>
+  </div>
+</div>
+
+<script>
+const STREETS = {
+  "Hermitage Road":    {min:3801,max:4203,step:2,boundary:true},
+  "Brook Road":        {min:3806,max:4708,step:2,boundary:true},
+  "W Laburnum Avenue": {min:1200,max:1520,step:2,boundary:true},
+  "Westbrook Avenue":  {min:1201,max:1631,step:2,boundary:true},
+  "Amherst Avenue":    {min:1200,max:1400,step:2},
+  "Avondale Avenue":   {min:1200,max:1520,step:2},
+  "Bellevue Avenue":   {min:1200,max:1720,step:2},
+  "Claremont Avenue":  {min:1300,max:1520,step:2},
+  "Fauquier Avenue":   {min:3900,max:4320,step:2},
+  "Greycourt Avenue":  {min:1200,max:1620,step:2},
+  "MacArthur Avenue":  {min:3900,max:4220,step:2},
+  "Newport Drive":     {min:4300,max:4520,step:2},
+  "Nottoway Avenue":   {min:1200,max:1440,step:2},
+  "Pope Avenue":       {min:1400,max:1820,step:2},
+  "Princeton Road":    {min:1400,max:1720,step:2},
+  "Seminary Avenue":   {min:1200,max:1620,step:2},
+  "Westminster Avenue":{min:1200,max:1400,step:2},
+  "Windsor Avenue":    {min:1200,max:1400,step:2},
+};
+const CATS_LIST = [
+  {key:'wonderful',label:"It's a Wonderful Life",sub:"Traditional, no inflatables"},
+  {key:'anything', label:"Anything Goes",         sub:"Unique!"},
+  {key:'tree',     label:"Oh, Christmas Tree",    sub:"Best single tree"},
+  {key:'doors',    label:"Best Doors in Bellevue",sub:""},
+];
+const CATS = Object.fromEntries(CATS_LIST.map(c=>[c.key,c.label]));
+const CAT_CLASS = {wonderful:"cat-wonderful",anything:"cat-anything",tree:"cat-tree",doors:"cat-doors"};
+
+let selectedStreet=null,selectedNum=null,selectedCat=null;
+let scores={curb:0,overall:0,unique:0};
+let currentPhoto=null,judgeId='';
+const combos={};
+
+function getOrCreateJudgeId(){
+  let id=localStorage.getItem('luth_judge_id');
+  if(!id){id='J'+Math.random().toString(36).substr(2,6).toUpperCase();localStorage.setItem('luth_judge_id',id);}
+  return id;
+}
+function getVotes(){return JSON.parse(localStorage.getItem('luth_votes')||'[]');}
+function saveVotes(v){localStorage.setItem('luth_votes',JSON.stringify(v));}
+
+function initCombo(id,opts){
+  const inputEl=document.getElementById(id+'-input');
+  const dropdownEl=document.getElementById(id+'-dropdown');
+  const clearBtn=document.getElementById(id+'-clear');
+  combos[id]={inputEl,dropdownEl,clearBtn,...opts};
+  inputEl.addEventListener('focus',()=>renderDropdown(id,inputEl.value));
+  inputEl.addEventListener('input',()=>{
+    renderDropdown(id,inputEl.value);
+    clearBtn.style.display=inputEl.value?'block':'none';
+    if(id==='street'&&selectedStreet){selectedStreet=null;resetNumCombo();onAddressChange();}
+    if(id==='num'&&selectedNum){selectedNum=null;onAddressChange();}
+    if(id==='cat'&&selectedCat){selectedCat=null;onAddressChange();}
+  });
+  inputEl.addEventListener('keydown',e=>{
+    const items=[...dropdownEl.querySelectorAll('.combo-option')];
+    const hi=dropdownEl.querySelector('.combo-option.highlighted');
+    const idx=items.indexOf(hi);
+    if(e.key==='ArrowDown'){e.preventDefault();const n=items[idx+1]||items[0];if(n){hi&&hi.classList.remove('highlighted');n.classList.add('highlighted');n.scrollIntoView({block:'nearest'});}}
+    if(e.key==='ArrowUp'){e.preventDefault();const n=items[idx-1]||items[items.length-1];if(n){hi&&hi.classList.remove('highlighted');n.classList.add('highlighted');n.scrollIntoView({block:'nearest'});}}
+    if(e.key==='Enter'){e.preventDefault();if(hi)hi.click();}
+    if(e.key==='Escape'){closeDropdown(id);}
+  });
+  document.addEventListener('click',e=>{if(!document.getElementById('combo-'+id).contains(e.target))closeDropdown(id);});
+}
+
+function highlight(text,query){
+  if(!query)return text;
+  const i=text.toLowerCase().indexOf(query.toLowerCase());
+  if(i<0)return text;
+  return text.slice(0,i)+'<mark>'+text.slice(i,i+query.length)+'</mark>'+text.slice(i+query.length);
+}
+
+function renderDropdown(id,query){
+  const{dropdownEl,options,grouped,onSelect}=combos[id];
+  const q=query.trim().toLowerCase();
+  dropdownEl.innerHTML='';dropdownEl.classList.add('open');
+  if(grouped){
+    let total=0;
+    options.forEach(grp=>{
+      const matches=grp.items.filter(it=>it.label.toLowerCase().includes(q)||(it.sub&&it.sub.toLowerCase().includes(q)));
+      if(!matches.length)return;
+      const gh=document.createElement('div');gh.className='combo-group';gh.textContent=grp.group;dropdownEl.appendChild(gh);
+      matches.forEach(it=>{
+        const el=document.createElement('div');el.className='combo-option';
+        el.innerHTML=highlight(it.label,q)+(it.sub?'<div style="font-size:11px;color:#888;margin-top:1px">'+it.sub+'</div>':'');
+        el.onclick=()=>{onSelect(it.value,it.label);closeDropdown(id);};
+        dropdownEl.appendChild(el);total++;
+      });
+    });
+    if(!total){const e=document.createElement('div');e.className='combo-empty';e.textContent='No matches';dropdownEl.appendChild(e);}
+  } else {
+    const matches=options.filter(it=>String(it.label).toLowerCase().includes(q));
+    if(!matches.length){const e=document.createElement('div');e.className='combo-empty';e.textContent='No matches';dropdownEl.appendChild(e);}
+    matches.forEach(it=>{
+      const el=document.createElement('div');el.className='combo-option';
+      el.innerHTML=highlight(String(it.label),q);
+      el.onclick=()=>{onSelect(it.value,it.label);closeDropdown(id);};
+      dropdownEl.appendChild(el);
+    });
+  }
+}
+
+function closeDropdown(id){const{dropdownEl}=combos[id];dropdownEl.classList.remove('open');dropdownEl.innerHTML='';}
+
+function clearCombo(id){
+  const{inputEl,clearBtn}=combos[id];inputEl.value='';clearBtn.style.display='none';closeDropdown(id);
+  if(id==='street'){selectedStreet=null;resetNumCombo();onAddressChange();}
+  if(id==='num'){selectedNum=null;onAddressChange();}
+  if(id==='cat'){selectedCat=null;onAddressChange();}
+}
+
+function buildStreetOptions(){
+  const boundaries=Object.keys(STREETS).filter(k=>STREETS[k].boundary).sort();
+  const interior=Object.keys(STREETS).filter(k=>!STREETS[k].boundary).sort();
+  return[
+    {group:'Boundary Streets',items:boundaries.map(k=>({value:k,label:k,sub:''}))},
+    {group:'Interior Streets',items:interior.map(k=>({value:k,label:k,sub:''}))},
+  ];
+}
+
+function buildNumOptions(street){
+  const info=STREETS[street],out=[];
+  for(let n=info.min;n<=info.max;n+=info.step)out.push({value:n,label:n});
+  return out;
+}
+
+function resetNumCombo(){
+  const c=combos['num'];
+  c.inputEl.value='';c.inputEl.disabled=true;c.inputEl.classList.add('disabled');
+  c.inputEl.placeholder='Select a street first...';c.clearBtn.style.display='none';c.options=[];selectedNum=null;
+}
+
+function onAddressChange(){
+  checkDuplicate();
+  const show=selectedStreet&&selectedNum&&selectedCat;
+  document.getElementById('scoring-card').style.display=show?'block':'none';
+  document.getElementById('submit-area').style.display=show?'block':'none';
+  if(selectedCat){
+    document.getElementById('ag-group').style.display=selectedCat==='anything'?'block':'none';
+    if(selectedCat!=='anything')scores.unique=0;
+  }
+}
+
+function checkDuplicate(){
+  const addr=getFullAddress();
+  if(!addr){document.getElementById('duplicate-warn').style.display='none';return;}
+  const dup=getVotes().find(v=>v.address===addr&&v.judgeId===judgeId);
+  document.getElementById('duplicate-warn').style.display=dup?'block':'none';
+}
+
+function getFullAddress(){return(selectedStreet&&selectedNum)?selectedNum+' '+selectedStreet:null;}
+
+function handlePhoto(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=600;let w=img.width,h=img.height;
+      if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
+      const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      currentPhoto=canvas.toDataURL('image/jpeg',0.7);
+      document.getElementById('photo-preview-img').src=currentPhoto;
+      document.getElementById('photo-preview-wrap').style.display='block';
+      document.getElementById('photo-zone').style.display='none';
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function removePhoto(){
+  currentPhoto=null;
+  document.getElementById('photo-preview-wrap').style.display='none';
+  document.getElementById('photo-zone').style.display='block';
+  document.getElementById('photo-input').value='';
+}
+
+function makeStars(containerId,key){
+  const c=document.getElementById(containerId);c.innerHTML='';
+  for(let i=1;i<=5;i++){
+    const b=document.createElement('button');
+    b.className='star'+(scores[key]>=i?' active':'');b.textContent='★';
+    b.onclick=(()=>{const val=i;return()=>{scores[key]=val;makeStars(containerId,key);}})();
+    c.appendChild(b);
+  }
+}
+
+function submitVote(){
+  const addr=getFullAddress(),cat=selectedCat;
+  if(!addr||!cat){alert('Please fill in address and category.');return;}
+  if(scores.curb===0||scores.overall===0){alert('Please rate Curb Appeal and Overall Presentation.');return;}
+  if(cat==='anything'&&scores.unique===0){alert('Please rate Unique Design for Anything Goes.');return;}
+  const vote={
+    judgeId,timestamp:new Date().toISOString(),
+    address:addr,street:selectedStreet,houseNum:String(selectedNum),
+    category:cat,categoryName:CATS[cat],
+    curbAppeal:scores.curb,overallPresentation:scores.overall,
+    uniqueDesign:cat==='anything'?scores.unique:null,
+    notes:document.getElementById('notes-input').value,
+    photo:currentPhoto||null,
+    total:cat==='anything'?Math.round((scores.curb+scores.overall+scores.unique)/3*10)/10:Math.round((scores.curb+scores.overall)/2*10)/10
+  };
+  let votes=getVotes();
+  const idx=votes.findIndex(v=>v.address===addr&&v.judgeId===judgeId);
+  if(idx>=0)votes[idx]=vote;else votes.push(vote);
+  saveVotes(votes);
+  const msg=document.getElementById('submit-msg');msg.style.display='block';
+  setTimeout(()=>msg.style.display='none',3000);
+  scores={curb:0,overall:0,unique:0};
+  ['curb','overall','unique'].forEach(k=>makeStars('stars-'+k,k));
+  document.getElementById('notes-input').value='';
+  removePhoto();
+  clearCombo('street');clearCombo('num');clearCombo('cat');
+  selectedStreet=null;selectedNum=null;selectedCat=null;
+  resetNumCombo();onAddressChange();
+  refreshMyVotes();refreshExport();refreshResults();
+}
+
+function refreshMyVotes(){
+  const votes=getVotes().filter(v=>v.judgeId===judgeId);
+  document.getElementById('my-vote-count').textContent=votes.length;
+  if(votes.length){const avg=votes.reduce((a,v)=>a+v.total,0)/votes.length;document.getElementById('my-avg-score').textContent=avg.toFixed(1);}
+  const list=document.getElementById('my-votes-list');
+  if(!votes.length){list.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px;">&#127968;</div>No votes yet.</div>';return;}
+  list.innerHTML=votes.sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).map(v=>`
+    <div class="vote-item">
+      ${v.photo?'<img class="vote-thumb" src="'+v.photo+'" alt="">':'<div class="vote-thumb-placeholder">&#127968;</div>'}
+      <div style="flex:1;min-width:0">
+        <div class="vote-addr">${v.address}</div>
+        <div style="margin-top:2px"><span class="cat-badge ${CAT_CLASS[v.category]}">${v.categoryName}</span></div>
+        ${v.notes?'<div style="font-size:11px;color:#888;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+v.notes+'</div>':''}
+      </div>
+      <div style="font-size:18px;font-weight:700;color:#1B4332;font-family:\'Playfair Display\',serif;flex-shrink:0">&#11088;${v.total}</div>
+    </div>`).join('');
+}
+
+function refreshResults(){
+  const votes=getVotes();const byAddr={};
+  votes.forEach(v=>{
+    const key=v.address+'||'+v.category;
+    if(!byAddr[key])byAddr[key]={address:v.address,category:v.category,categoryName:v.categoryName,totals:[],count:0,photo:null};
+    byAddr[key].totals.push(v.total);byAddr[key].count++;
+    if(v.photo&&!byAddr[key].photo)byAddr[key].photo=v.photo;
+  });
+  const ranked=Object.values(byAddr).map(h=>{h.avg=Math.round(h.totals.reduce((a,b)=>a+b,0)/h.totals.length*10)/10;return h;}).sort((a,b)=>b.avg-a.avg);
+  const catGroups={};ranked.forEach(h=>{if(!catGroups[h.category])catGroups[h.category]=[];catGroups[h.category].push(h);});
+  const el=document.getElementById('results-content');
+  if(!ranked.length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px;">&#128202;</div>No votes yet.</div>';return;}
+  el.innerHTML=Object.entries(catGroups).map(([cat,houses])=>`
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title" style="font-size:14px;">${CATS[cat]}</div>
+      ${houses.map((h,i)=>`
+        <div style="display:flex;gap:10px;align-items:center;padding:8px 0;border-bottom:${i<houses.length-1?'1px solid #f0f0f0':'none'}">
+          ${h.photo?'<img src="'+h.photo+'" style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0">':'<div style="width:40px;height:40px;border-radius:6px;background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">&#127968;</div>'}
+          <div style="flex:1"><div style="font-weight:500;font-size:14px;">${i===0?'&#129351; ':i===1?'&#129352; ':i===2?'&#129353; ':''}${h.address}</div><div style="font-size:11px;color:#888;">${h.count} vote${h.count!==1?'s':''}</div></div>
+          <div style="font-size:18px;font-weight:700;color:#1B4332;font-family:'Playfair Display',serif;">${h.avg}</div>
+        </div>`).join('')}
+    </div>`).join('');
+}
+
+function refreshExport(){
+  const votes=getVotes();
+  document.getElementById('export-count').textContent=votes.length;
+  document.getElementById('export-houses').textContent=new Set(votes.map(v=>v.address)).size;
+}
+
+function exportCSV(){
+  const votes=getVotes();if(!votes.length){alert('No votes to export.');return;}
+  const headers=['judgeId','timestamp','address','street','houseNum','category','categoryName','curbAppeal','overallPresentation','uniqueDesign','total','notes','hasPhoto'];
+  const rows=votes.map(v=>headers.map(h=>{
+    if(h==='hasPhoto')return v.photo?'yes':'no';
+    const val=v[h]??'';
+    return(typeof val==='string'&&(val.includes(',')||val.includes('"')))?'"'+val.replace(/"/g,'""')+'"':val;
+  }).join(','));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([[headers.join(','),...rows].join('\n')],{type:'text/csv'}));
+  a.download='luth_votes_'+judgeId+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+
+function clearAllData(){
+  if(!confirm('Delete ALL votes on this device? Cannot be undone.'))return;
+  localStorage.removeItem('luth_votes');
+  refreshMyVotes();refreshExport();refreshResults();
+}
+
+function generateHostLink(){
+  if(!selectedStreet||!selectedNum||!selectedCat){alert('Select street, house number, and category first.');return;}
+  const url=window.location.href.split('?')[0]+'?street='+encodeURIComponent(selectedStreet)+'&num='+selectedNum+'&cat='+selectedCat;
+  document.getElementById('host-link-text').textContent=url;
+  document.getElementById('host-link-box').style.display='block';
+  window._hostLinkUrl=url;
+}
+function copyHostLink(){
+  navigator.clipboard.writeText(window._hostLinkUrl||'').then(()=>{
+    const b=event.target;b.textContent='Copied!';setTimeout(()=>b.textContent='Copy Link',2000);
+  });
+}
+
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('screen-'+name).classList.add('active');
+  ['vote','my-votes','results','export'].forEach((t,i)=>{if(t===name)document.querySelectorAll('.nav-tab')[i].classList.add('active');});
+  if(name==='my-votes')refreshMyVotes();
+  if(name==='results')refreshResults();
+  if(name==='export')refreshExport();
+}
+
+function init(){
+  judgeId=getOrCreateJudgeId();
+  document.getElementById('judge-badge').textContent='Judge: '+judgeId;
+  document.getElementById('judge-id-display').textContent=judgeId;
+  initCombo('street',{
+    options:buildStreetOptions(),grouped:true,
+    onSelect:(value,label)=>{
+      selectedStreet=value;combos['street'].inputEl.value=label;combos['street'].clearBtn.style.display='block';
+      const c=combos['num'];c.options=buildNumOptions(value);c.inputEl.disabled=false;
+      c.inputEl.classList.remove('disabled');c.inputEl.placeholder='Type or select number...';
+      selectedNum=null;c.inputEl.value='';c.clearBtn.style.display='none';onAddressChange();
+    }
+  });
+  initCombo('num',{options:[],grouped:false,
+    onSelect:(value,label)=>{selectedNum=value;combos['num'].inputEl.value=String(label);combos['num'].clearBtn.style.display='block';onAddressChange();}
+  });
+  initCombo('cat',{
+    options:[{group:'Categories',items:CATS_LIST.map(c=>({value:c.key,label:c.label,sub:c.sub}))}],grouped:true,
+    onSelect:(value,label)=>{selectedCat=value;combos['cat'].inputEl.value=label;combos['cat'].clearBtn.style.display='block';onAddressChange();}
+  });
+  const p=new URLSearchParams(window.location.search);
+  const street=p.get('street'),num=p.get('num'),cat=p.get('cat');
+  if(street&&num&&cat&&STREETS[street]){
+    document.getElementById('url-prefill-banner').style.display='block';
+    selectedStreet=street;combos['street'].inputEl.value=street;combos['street'].clearBtn.style.display='block';
+    combos['num'].options=buildNumOptions(street);combos['num'].inputEl.disabled=false;
+    combos['num'].inputEl.classList.remove('disabled');combos['num'].inputEl.placeholder='Type or select number...';
+    selectedNum=parseInt(num);combos['num'].inputEl.value=num;combos['num'].clearBtn.style.display='block';
+    const catObj=CATS_LIST.find(c=>c.key===cat);
+    if(catObj){selectedCat=cat;combos['cat'].inputEl.value=catObj.label;combos['cat'].clearBtn.style.display='block';}
+    onAddressChange();
+  }
+  ['curb','overall','unique'].forEach(k=>makeStars('stars-'+k,k));
+  refreshMyVotes();refreshExport();refreshResults();
+}
+
+init();
+</script>
+</body>
+</html>

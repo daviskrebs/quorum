@@ -1,0 +1,13 @@
+{
+  "name": "Light Up the Hood",
+  "short_name": "Light Up",
+  "description": "Judge the Bellevue holiday lights contest street by street.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#FFFDF5",
+  "theme_color": "#1B4332",
+  "icons": [
+    { "src": "icons/icon-180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

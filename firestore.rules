@@ -28,8 +28,14 @@ service cloud.firestore {
       match /sessions/{code} {
         allow read: if signedIn();
         allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
-        allow update: if signedIn() && resource.data.hostUid == request.auth.uid
-          && request.resource.data.hostUid == resource.data.hostUid;
+        // The host can update the session and hand hosting to any judge in it.
+        // Any judge in the session can take over hosting (only hostUid/hostName, set to themselves).
+        allow update: if signedIn() && (
+          (resource.data.hostUid == request.auth.uid
+            && exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.resource.data.hostUid)))
+          || (exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.auth.uid))
+            && request.resource.data.hostUid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostUid', 'hostName'])));
         match /judges/{uid} {
           allow read: if signedIn();
           allow write: if signedIn() && uid == request.auth.uid;

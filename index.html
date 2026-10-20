@@ -647,6 +647,14 @@ function renderSessionCard(){
   }
   const s=Cloud.session;
   const host=Cloud.isHost();
+  if(host&&pickingHost){
+    const others=Cloud.judges.filter(j=>j.uid!==judgeId);
+    el.innerHTML=`<div class="card"><div class="card-title">Who should host?</div>
+      <p class="muted" style="margin-bottom:6px">They'll open and close voting. You stay on as a judge.</p>
+      ${others.length?others.map(j=>`<button class="btn btn-secondary" data-make-host="${esc(j.uid)}">Make ${esc(j.name)} host</button>`).join(''):'<p class="muted">No other judges have joined yet.</p>'}
+      <button class="btn btn-ghost" data-action="cancel-pick-host">Cancel</button></div>`;
+    return;
+  }
   const pills=Cloud.judges.map(j=>{
     const isH=s&&j.uid===s.hostUid;
     const rm=host&&!isH?` <button class="pill-x" data-remove-judge="${esc(j.uid)}" aria-label="Remove ${esc(j.name)}">&#215;</button>`:'';
@@ -657,7 +665,24 @@ function renderSessionCard(){
     <div class="judge-pills">${pills}</div>
     ${host?'<p class="muted" style="margin:6px 0 0">Open a street and tap a house, then tap <b>Open voting</b>. Tap &#215; to remove a judge who left.</p>':''}
     <div class="btn-row"><button class="btn btn-secondary" data-action="invite">Invite judges</button>
-    <button class="btn btn-ghost" data-action="leave-session">Leave</button></div></div>`;
+    <button class="btn btn-ghost" data-action="leave-session">Leave</button></div>
+    ${s?(host?'<button class="btn btn-ghost" data-action="pick-host">Hand off hosting</button>'
+      :'<button class="btn btn-ghost" data-action="claim-host">Take over hosting</button>'):''}</div>`;
+}
+let pickingHost=false;
+async function makeHost(uid){
+  const j=Cloud.judges.find(j=>j.uid===uid);if(!j)return;
+  if(Cloud.session.current&&!confirm(`Voting is open on ${addrOf(Cloud.session.current.num,Cloud.session.current.street)}. ${j.name} will take it over. Continue?`))return;
+  if(!Cloud.session.current&&!confirm(`Make ${j.name} the host?`))return;
+  pickingHost=false;
+  try{await Cloud.makeHost(uid);}catch(e){toast('Could not change host. Try again.');}
+  renderAll();
+}
+async function claimHost(){
+  const s=Cloud.session;if(!s)return;
+  if(!confirm(`Take over hosting from ${s.hostName}? Do this if they can't run the session. You'll open and close voting for everyone.`))return;
+  const name=judgeName();if(!name)return;
+  try{await Cloud.claimHost(name);}catch(e){toast('Could not take over. Try again.');}
 }
 function judgeStatus(j,c){
   const v=getVotes().find(v=>v.judgeId===j.uid&&v.address===addrOf(c.num,c.street));
@@ -713,8 +738,16 @@ function goToCall(){
 }
 let lastCallId=null,openCall=null;
 // A judge's phone jumps to a newly called house, unless they're mid-way through scoring another.
+let lastHostUid=null;
 function onSessionUpdate(){
   const c=Cloud.session&&Cloud.session.current;
+  // Tell everyone when the host changes.
+  const h=Cloud.session&&Cloud.session.hostUid;
+  if(h&&lastHostUid&&h!==lastHostUid){
+    toast(h===judgeId?"You're now the host":`${Cloud.session.hostName} is now the host`);
+    if(h===judgeId&&c){lastCallId=c.callId;} // new host shouldn't be "sent" to the open house
+  }
+  if(h)lastHostUid=h;
   // Host closed voting: leave that house unless the judge is mid-score (they can still save).
   if(openCall&&(!c||c.callId!==openCall.callId)&&!Cloud.isHost()){
     const was=openCall;openCall=null;
@@ -743,7 +776,7 @@ async function joinSession(code){
   code=code||(prompt('Session code from the host')||'').trim();if(!code)return;
   const name=judgeName();if(!name)return;
   showIdentity();
-  lastCallId=null;openCall=null; // a (re)joining judge should land on any open house
+  lastCallId=null;openCall=null;lastHostUid=null; // a (re)joining judge should land on any open house
   try{await Cloud.joinSession(code,name);toast('Joined session '+code.toUpperCase());}
   catch(e){toast(e.message);}
 }
@@ -770,13 +803,14 @@ let toastTimer;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-remove-judge],[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
+  const t=e.target.closest('[data-make-host],[data-remove-judge],[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
   if(!t)return;
   if(t.dataset.tab){showScreen(t.dataset.tab);window.scrollTo(0,0);return;}
   if(t.dataset.street){openStreet(t.dataset.street);return;}
   if(t.dataset.house){openSheet(t.dataset.house);return;}
   if(t.dataset.cat){sheet.cat=t.dataset.cat;sheet.dirty=true;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();return;}
   if(t.dataset.star){sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;sheet.dirty=true;renderSheet();return;}
+  if(t.dataset.makeHost){makeHost(t.dataset.makeHost);return;}
   if(t.dataset.removeJudge){
     const j=Cloud.judges.find(j=>j.uid===t.dataset.removeJudge);
     if(j&&confirm(`Remove ${j.name} from the session? Their votes so far still count. They can rejoin with the code.`))Cloud.removeJudge(j.uid);
@@ -789,7 +823,9 @@ document.addEventListener('click',e=>{
     'remove-photo':()=>{setPhoto(null);sheet.dirty=true;},export:exportCSV,'clear-all':clearAll,
     'start-session':startSession,'join-session':()=>joinSession(),invite,'leave-session':leaveSession,
     'call-house':()=>{if(!Cloud.session.current)Cloud.callHouse(sheet.street,sheet.num);},
-    'close-voting':closeVoting,'go-call':goToCall,
+    'close-voting':closeVoting,
+    'pick-host':()=>{pickingHost=true;renderSessionCard();},'cancel-pick-host':()=>{pickingHost=false;renderSessionCard();},
+    'claim-host':claimHost,'go-call':goToCall,
   })[t.dataset.action]?.();
 });
 $('photo-input').addEventListener('change',e=>handlePhoto(e.target.files[0]));

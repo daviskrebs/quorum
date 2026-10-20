@@ -157,6 +157,14 @@
     if (!Cloud.isHost() || uid === Cloud.uid) return;
     F.deleteDoc(ref('sessions', Cloud.sessionCode, 'judges', uid)).catch(console.error);
   };
+  // Host hands hosting to another judge in the session.
+  Cloud.makeHost = uid => {
+    const j = Cloud.judges.find(j => j.uid === uid);
+    if (!Cloud.isHost() || !j) return Promise.resolve();
+    return F.updateDoc(ref('sessions', Cloud.sessionCode), { hostUid: uid, hostName: j.name });
+  };
+  // Any judge takes over hosting (the host is stuck or gone).
+  Cloud.claimHost = name => F.updateDoc(ref('sessions', Cloud.sessionCode), { hostUid: Cloud.uid, hostName: name });
   Cloud.isHost = () => !!(Cloud.session && Cloud.session.hostUid === Cloud.uid);
   // Host only: send every judge in the session to this house.
   Cloud.callHouse = (street, num) => {

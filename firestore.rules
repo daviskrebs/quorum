@@ -33,6 +33,9 @@ service cloud.firestore {
         match /judges/{uid} {
           allow read: if signedIn();
           allow write: if signedIn() && uid == request.auth.uid;
+          // The host can remove a judge who left without tapping Leave.
+          allow delete: if signedIn()
+            && get(/databases/$(database)/documents/contests/$(year)/sessions/$(code)).data.hostUid == request.auth.uid;
         }
       }
     }

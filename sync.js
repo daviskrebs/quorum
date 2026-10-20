@@ -107,6 +107,11 @@
     }, err => { console.error(err); emit('error'); });
     unsubJudges = F.onSnapshot(col('sessions', code, 'judges'), snap => {
       Cloud.judges = snap.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
+      // The host removed this judge (or their entry is gone): drop out locally; they can rejoin by code.
+      if (Cloud.uid && !snap.metadata.hasPendingWrites && !Cloud.judges.some(j => j.uid === Cloud.uid)) {
+        stopWatching(); Cloud.sessionCode = null; localStorage.removeItem('luth_session');
+        emit('removed'); emit('session'); return;
+      }
       emit('judges');
     });
   }
@@ -139,16 +144,24 @@
   };
   Cloud.leaveSession = () => {
     const code = Cloud.sessionCode;
+    // A host leaving closes any open house so judges aren't left waiting on it.
+    if (Cloud.isHost() && Cloud.session.current) F.updateDoc(ref('sessions', code), { current: null }).catch(() => {});
     if (code && Cloud.uid) F.deleteDoc(ref('sessions', code, 'judges', Cloud.uid)).catch(() => {});
     stopWatching();
     Cloud.sessionCode = null;
     localStorage.removeItem('luth_session');
     emit('session');
   };
+  // Host only: take a judge out of the session (left early, phone died). Their votes stay.
+  Cloud.removeJudge = uid => {
+    if (!Cloud.isHost() || uid === Cloud.uid) return;
+    F.deleteDoc(ref('sessions', Cloud.sessionCode, 'judges', uid)).catch(console.error);
+  };
   Cloud.isHost = () => !!(Cloud.session && Cloud.session.hostUid === Cloud.uid);
   // Host only: send every judge in the session to this house.
   Cloud.callHouse = (street, num) => {
     if (!Cloud.isHost()) return;
+    if (street && Cloud.session.current) return; // one open house at a time: close it first
     const current = street ? { street, num: String(num), callId: Date.now().toString(36) } : null;
     F.updateDoc(ref('sessions', Cloud.sessionCode), { current }).catch(console.error);
   };

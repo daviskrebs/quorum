@@ -148,6 +148,8 @@
   .judge-pills{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
   .judge-pill{background:#F2EEE2;border-radius:20px;padding:4px 10px;font-size:12px}
   .judge-pill.host{background:var(--cream)}
+  .pill-x{border:none;background:none;font-size:14px;color:#999;cursor:pointer;padding:0 0 0 4px;line-height:1}
+  .row-x{border:none;background:none;color:#999;font-size:12px;text-decoration:underline;cursor:pointer;margin-left:6px}
   .offline{display:inline-block;background:#FFF3CD;color:#7A5A00;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px}
   .callbar{position:fixed;left:0;right:0;bottom:calc(58px + var(--safe-bot));z-index:35;display:none;justify-content:center;padding:0 12px 8px}
   .callbar.show{display:flex}
@@ -645,12 +647,15 @@ function renderSessionCard(){
   }
   const s=Cloud.session;
   const host=Cloud.isHost();
-  const pills=Cloud.judges.map(j=>`<span class="judge-pill${s&&j.uid===s.hostUid?' host':''}">${esc(j.name)}${s&&j.uid===s.hostUid?' · host':''}</span>`).join('');
+  const pills=Cloud.judges.map(j=>{
+    const isH=s&&j.uid===s.hostUid;
+    const rm=host&&!isH?` <button class="pill-x" data-remove-judge="${esc(j.uid)}" aria-label="Remove ${esc(j.name)}">&#215;</button>`:'';
+    return `<span class="judge-pill${isH?' host':''}">${esc(j.name)}${isH?' · host':''}${rm}</span>`;}).join('');
   el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
       <div><div class="muted">Session code${off}</div><div class="session-code">${esc(Cloud.sessionCode)}</div></div>
       <div class="muted" style="text-align:right">${host?'You are the host':s?'Host: '+esc(s.hostName):'Connecting...'}</div></div>
     <div class="judge-pills">${pills}</div>
-    ${host?'<p class="muted" style="margin:6px 0 0">Open a street and tap a house, then tap <b>Open voting</b>.</p>':''}
+    ${host?'<p class="muted" style="margin:6px 0 0">Open a street and tap a house, then tap <b>Open voting</b>. Tap &#215; to remove a judge who left.</p>':''}
     <div class="btn-row"><button class="btn btn-secondary" data-action="invite">Invite judges</button>
     <button class="btn btn-ghost" data-action="leave-session">Leave</button></div></div>`;
 }
@@ -670,11 +675,15 @@ function renderHostPanel(){
   }
   if(!called){
     const other=Cloud.session.current;
-    el.innerHTML=`<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting for this house</button>`
-      +(other?`<p class="muted" style="font-size:12px;margin:-8px 0 12px">This closes voting on ${esc(addrOf(other.num,other.street))}.</p>`:'');
+    el.innerHTML=other
+      ?`<div class="alert alert-warn" style="margin:0 0 14px">Voting is still open on <b>${esc(addrOf(other.num,other.street))}</b>. Close it before opening another house.
+         <button class="btn btn-secondary" style="margin-top:8px" data-action="go-call">Go to ${esc(addrOf(other.num,other.street))}</button></div>`
+      :`<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting for this house</button>`;
     return;
   }
-  const rows=Cloud.judges.map(j=>{const st=judgeStatus(j,called);return `<div class="row"><span>${esc(j.name)}${j.uid===judgeId?' (you)':''}</span><span class="${st.cls}">${st.text}</span></div>`;}).join('');
+  const rows=Cloud.judges.map(j=>{const st=judgeStatus(j,called);
+    const rm=st.cls==='st-wait'&&j.uid!==judgeId?` <button class="row-x" data-remove-judge="${esc(j.uid)}">remove</button>`:'';
+    return `<div class="row"><span>${esc(j.name)}${j.uid===judgeId?' (you)':''}</span><span class="${st.cls}">${st.text}${rm}</span></div>`;}).join('');
   const done=Cloud.judges.filter(j=>judgeStatus(j,called).cls!=='st-wait').length;
   el.innerHTML=`<div class="host-panel"><div style="display:flex;justify-content:space-between;margin-bottom:6px">
     <b style="color:var(--green)">&#128227; Voting open</b><span class="muted">${done} of ${Cloud.judges.length} done</span></div>${rows}
@@ -734,6 +743,7 @@ async function joinSession(code){
   code=code||(prompt('Session code from the host')||'').trim();if(!code)return;
   const name=judgeName();if(!name)return;
   showIdentity();
+  lastCallId=null;openCall=null; // a (re)joining judge should land on any open house
   try{await Cloud.joinSession(code,name);toast('Joined session '+code.toUpperCase());}
   catch(e){toast(e.message);}
 }
@@ -743,7 +753,7 @@ function invite(){
   else navigator.clipboard.writeText(url).then(()=>toast('Invite link copied'),()=>prompt('Copy this link',url));
 }
 function leaveSession(){
-  if(Cloud.isHost()&&!confirm('Leave this session? Judges will stop getting houses from you.'))return;
+  if(Cloud.isHost()&&!confirm('Leave this session? Any open house closes, and judges stop getting houses from you. You can rejoin with the code and stay host.'))return;
   Cloud.leaveSession();
 }
 
@@ -760,23 +770,25 @@ let toastTimer;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 
 document.addEventListener('click',e=>{
-  const t=e.target.closest('[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
+  const t=e.target.closest('[data-remove-judge],[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
   if(!t)return;
   if(t.dataset.tab){showScreen(t.dataset.tab);window.scrollTo(0,0);return;}
   if(t.dataset.street){openStreet(t.dataset.street);return;}
   if(t.dataset.house){openSheet(t.dataset.house);return;}
   if(t.dataset.cat){sheet.cat=t.dataset.cat;sheet.dirty=true;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();return;}
   if(t.dataset.star){sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;sheet.dirty=true;renderSheet();return;}
+  if(t.dataset.removeJudge){
+    const j=Cloud.judges.find(j=>j.uid===t.dataset.removeJudge);
+    if(j&&confirm(`Remove ${j.name} from the session? Their votes so far still count. They can rejoin with the code.`))Cloud.removeJudge(j.uid);
+    return;
+  }
   if(t.dataset.editStreet){openStreet(t.dataset.editStreet);openSheet(t.dataset.editNum);return;}
   ({
     back:()=>showScreen('streets'),'add-house':addHouse,'finish-street':finishStreet,'share-street':shareStreet,
     'close-sheet':closeSheet,'save-next':saveVote,'skip-house':skipHouse,'clear-house':clearHouse,
     'remove-photo':()=>{setPhoto(null);sheet.dirty=true;},export:exportCSV,'clear-all':clearAll,
     'start-session':startSession,'join-session':()=>joinSession(),invite,'leave-session':leaveSession,
-    'call-house':()=>{
-      const o=Cloud.session.current;
-      if(o&&!confirm(`Close voting on ${addrOf(o.num,o.street)} and open this house?`))return;
-      Cloud.callHouse(sheet.street,sheet.num);},
+    'call-house':()=>{if(!Cloud.session.current)Cloud.callHouse(sheet.street,sheet.num);},
     'close-voting':closeVoting,'go-call':goToCall,
   })[t.dataset.action]?.();
 });
@@ -799,6 +811,7 @@ if(CLOUD){
   Cloud.onChange(kind=>{
     if(kind==='error')toast('Sync problem. Votes are saved and will retry.');
     if(kind==='session-missing')toast('That session has ended');
+    if(kind==='removed'){lastCallId=null;openCall=null;closeSheet();toast('The host removed you from the session. Rejoin with the code anytime.');}
     if(kind==='session'||kind==='judges')onSessionUpdate();
     renderAll();
   });

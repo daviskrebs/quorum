@@ -8,6 +8,9 @@
 var LUTH_CONFIG = {
   // Contest year. Synced votes are stored per year so seasons never mix.
   YEAR: 2026,
+  // Change this number to wipe what's saved on each phone (skips, added houses, session)
+  // the next time it opens the site. Bump it once when testing is done.
+  PHONE_DATA_VERSION: 1,
   // Search box for address points: [west, south, east, north] in lon/lat.
   BBOX: [-77.472, 37.578, -77.438, 37.605],
   STREETS: [

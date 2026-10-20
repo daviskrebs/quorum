@@ -346,6 +346,16 @@
 <div class="toast" id="toast"></div>
 
 <script src="streets.config.js"></script>
+<script>
+// Clear leftover phone data when PHONE_DATA_VERSION changes (judge name is kept).
+try{
+  const v=String(LUTH_CONFIG.PHONE_DATA_VERSION||1);
+  if(localStorage.getItem('luth_phone_data_version')!==v){
+    ['luth_votes','luth_skips','luth_extra_houses','luth_session'].forEach(k=>localStorage.removeItem(k));
+    localStorage.setItem('luth_phone_data_version',v);
+  }
+}catch(e){}
+</script>
 <script src="addresses.js"></script>
 <script src="vendor/firebase.js"></script>
 <script src="firebase.config.js"></script>

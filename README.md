@@ -10,10 +10,10 @@ Judging app for the Bellevue (Richmond, VA) holiday lights contest. Judges pick 
 
 ## Load real house numbers
 ```sh
-node scripts/build-addresses.mjs            # fetches Richmond GIS, falls back to Virginia VGIN
+npm run build:addresses                   # fetches Richmond GIS (NODE_USE_ENV_PROXY=1 behind a proxy)
 node scripts/build-addresses.mjs --file x.json   # or use a downloaded GeoJSON / Esri JSON export
 ```
-It prints a count per street. Check those against what you know before committing. If a street shows "outside range", widen its `range` in `streets.config.js`.
+It traces the neighborhood outline from the four boundary streets (`edge:` in `streets.config.js`) and keeps only addresses inside it. It prints a count per street; check them before committing.
 
 Houses the data misses can be added in the app ("House not listed?"). They're saved on that judge's device.
 

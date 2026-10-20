@@ -70,6 +70,10 @@
 
   /* Street detail: houses laid out like the street itself */
   .sides{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .sides-head{margin-bottom:-4px}
+  .block-head{font-size:12px;font-weight:700;color:var(--green);margin:14px 2px 6px;display:flex;align-items:center;gap:8px}
+  .block-head::after{content:'';flex:1;height:1px;background:var(--line)}
+  .block:first-child .block-head{margin-top:4px}
   .side-head{font-size:11px;font-weight:700;color:#999;text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-bottom:6px}
   .houses{display:flex;flex-direction:column;gap:6px}
   .house{border:1px solid var(--line);background:#fff;border-radius:10px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;font-size:16px;font-weight:500;cursor:pointer;min-height:48px;text-align:left}
@@ -190,10 +194,8 @@
     </header>
     <div class="pad">
       <div id="street-nodata" class="alert alert-warn" style="display:none">No address list loaded for this street yet. Add houses as you reach them.</div>
-      <div class="sides">
-        <div><div class="side-head">Odd side</div><div class="houses" id="houses-odd"></div></div>
-        <div><div class="side-head">Even side</div><div class="houses" id="houses-even"></div></div>
-      </div>
+      <div class="sides sides-head"><div class="side-head">Odd side</div><div class="side-head">Even side</div></div>
+      <div id="blocks"></div>
       <div class="add-row">
         <input type="text" inputmode="numeric" pattern="[0-9]*" id="add-house-input" placeholder="House not listed? #">
         <button class="btn btn-secondary btn-sm" data-action="add-house">Add</button>
@@ -444,9 +446,12 @@ function renderStreet(){
     const label=s.state==='scored'?'&#11088; '+s.vote.total:s.state==='skipped'?'skip':'';
     return `<button class="house ${s.state}${extra.includes(n)?' extra':''}" data-house="${esc(n)}"><span>${esc(n)}</span><span class="st">${label}</span></button>`;
   };
-  const odd=all.filter(n=>parseInt(n,10)%2===1),even=all.filter(n=>parseInt(n,10)%2===0);
-  $('houses-odd').innerHTML=odd.map(chip).join('')||'<div class="empty-side">None</div>';
-  $('houses-even').innerHTML=even.map(chip).join('')||'<div class="empty-side">None</div>';
+  // Group by block (1200s, 1300s...) so both sides of the same block line up.
+  const blocks=new Map();
+  all.forEach(n=>{const b=Math.floor(parseInt(n,10)/100)*100;if(!blocks.has(b))blocks.set(b,[]);blocks.get(b).push(n);});
+  const side=list=>`<div class="houses">${list.map(chip).join('')||'<div class="empty-side">None</div>'}</div>`;
+  $('blocks').innerHTML=[...blocks].map(([b,list])=>`<div class="block"><div class="block-head">${b} block</div>
+    <div class="sides">${side(list.filter(n=>parseInt(n,10)%2===1))}${side(list.filter(n=>parseInt(n,10)%2===0))}</div></div>`).join('');
 }
 function addHouse(){
   const input=$('add-house-input');const n=input.value.trim().toUpperCase();

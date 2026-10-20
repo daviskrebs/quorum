@@ -52,7 +52,8 @@
 
   Cloud.ready.then(() => {
     F.onSnapshot(col('votes'), snap => {
-      Cloud.votes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Skip malformed documents so one bad write can't break standings.
+      Cloud.votes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(v => typeof v.address === 'string' && typeof v.total === 'number');
       emit('votes');
     }, err => { console.error(err); emit('error'); });
     const saved = localStorage.getItem('luth_session');

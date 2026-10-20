@@ -1,5 +1,7 @@
 // Bellevue streets (interior first, then boundary). Shared by the app and scripts/build-addresses.mjs.
-// range: optional [min, max] filter for long streets that run past Bellevue.
+// edge: which side of the neighborhood a boundary street forms. The importer traces the
+// outline from these and keeps only addresses inside it.
+// range: optional [min, max] house-number filter, if the outline ever needs help.
 // House numbers themselves come from addresses.js (real address points).
 var LUTH_CONFIG = {
   // Contest year. Synced votes are stored per year so seasons never mix.
@@ -7,24 +9,24 @@ var LUTH_CONFIG = {
   // Search box for address points: [west, south, east, north] in lon/lat.
   BBOX: [-77.472, 37.578, -77.438, 37.605],
   STREETS: [
-    { name: 'Amherst Avenue',     range: [1200, 1400] },
-    { name: 'Avondale Avenue',    range: [1200, 1520] },
-    { name: 'Bellevue Avenue',    range: [1200, 1720] },
-    { name: 'Claremont Avenue',   range: [1300, 1520] },
-    { name: 'Fauquier Avenue',    range: [3900, 4320] },
-    { name: 'Greycourt Avenue',   range: [1200, 1620] },
-    { name: 'MacArthur Avenue',   range: [3900, 4220] },
-    { name: 'Newport Drive',      range: [4300, 4520] },
-    { name: 'Nottoway Avenue',    range: [1200, 1440] },
-    { name: 'Pope Avenue',        range: [1400, 1820] },
-    { name: 'Princeton Road',     range: [1400, 1720] },
-    { name: 'Seminary Avenue',    range: [1200, 1620] },
-    { name: 'Westminster Avenue', range: [1200, 1400] },
-    { name: 'Windsor Avenue',     range: [1200, 1400] },
-    { name: 'Hermitage Road',     range: [3801, 4203], boundary: true },
-    { name: 'Brook Road',         range: [3806, 4708], boundary: true },
-    { name: 'W Laburnum Avenue',  range: [1200, 1520], boundary: true },
-    { name: 'Westbrook Avenue',   range: [1201, 1631], boundary: true },
+    { name: 'Amherst Avenue' },
+    { name: 'Avondale Avenue' },
+    { name: 'Bellevue Avenue' },
+    { name: 'Claremont Avenue' },
+    { name: 'Fauquier Avenue' },
+    { name: 'Greycourt Avenue' },
+    { name: 'MacArthur Avenue' },
+    { name: 'Newport Drive' },
+    { name: 'Nottoway Avenue' },
+    { name: 'Pope Avenue' },
+    { name: 'Princeton Road' },
+    { name: 'Seminary Avenue' },
+    { name: 'Westminster Avenue' },
+    { name: 'Windsor Avenue' },
+    { name: 'Hermitage Road', boundary: true, edge: 'west' },
+    { name: 'Brook Road', boundary: true, edge: 'east' },
+    { name: 'W Laburnum Avenue', boundary: true, edge: 'south' },
+    { name: 'Westbrook Avenue', boundary: true, edge: 'north' },
   ],
 };
 if (typeof module !== 'undefined') module.exports = LUTH_CONFIG;

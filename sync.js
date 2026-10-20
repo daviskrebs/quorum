@@ -167,10 +167,11 @@
   Cloud.claimHost = name => F.updateDoc(ref('sessions', Cloud.sessionCode), { hostUid: Cloud.uid, hostName: name });
   Cloud.isHost = () => !!(Cloud.session && Cloud.session.hostUid === Cloud.uid);
   // Host only: send every judge in the session to this house.
-  Cloud.callHouse = (street, num) => {
+  // cat: the category every judge scores this house in, chosen by the host.
+  Cloud.callHouse = (street, num, cat) => {
     if (!Cloud.isHost()) return;
-    if (street && Cloud.session.current) return; // one open house at a time: close it first
-    const current = street ? { street, num: String(num), callId: Date.now().toString(36) } : null;
+    if (street && (Cloud.session.current || !cat)) return; // one open house at a time, category required
+    const current = street ? { street, num: String(num), cat, callId: Date.now().toString(36) } : null;
     F.updateDoc(ref('sessions', Cloud.sessionCode), { current }).catch(console.error);
   };
   // Tell the host this judge is finished with the called house (scored or skipped).

@@ -500,8 +500,14 @@ function openSheet(num,presetCat){
   $('sheet').classList.add('open');$('sheet-backdrop').classList.add('open');
 }
 function closeSheet(){sheet.open=false;$('sheet').classList.remove('open');$('sheet-backdrop').classList.remove('open');renderCallbar();}
+// In a session, the host picks the category when opening voting; everyone's sheet locks to it.
+function lockedCat(){const c=calledHere();return c&&c.cat?c.cat:null;}
 function renderSheet(){
-  $('cat-chips').innerHTML=CATS_LIST.map(c=>`<button class="chip${sheet.cat===c.key?' on':''}" data-cat="${c.key}">${esc(c.label)}</button>`).join('');
+  const lock=lockedCat();
+  if(lock&&sheet.cat!==lock){sheet.cat=lock;if(lock!=='anything')sheet.scores.unique=0;}
+  $('cat-chips').innerHTML=lock
+    ?`<button class="chip on" disabled>${esc(CATS[lock])}</button><span class="muted" style="align-self:center;font-size:12px">Set by the host</span>`
+    :CATS_LIST.map(c=>`<button class="chip${sheet.cat===c.key?' on':''}" data-cat="${c.key}">${esc(c.label)}</button>`).join('');
   $('unique-group').style.display=sheet.cat==='anything'?'':'none';
   document.querySelectorAll('#sheet .stars').forEach(el=>{
     const k=el.dataset.key;
@@ -703,7 +709,9 @@ function renderHostPanel(){
     el.innerHTML=other
       ?`<div class="alert alert-warn" style="margin:0 0 14px">Voting is still open on <b>${esc(addrOf(other.num,other.street))}</b>. Close it before opening another house.
          <button class="btn btn-secondary" style="margin-top:8px" data-action="go-call">Go to ${esc(addrOf(other.num,other.street))}</button></div>`
-      :`<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting for this house</button>`;
+      :sheet.cat
+        ?`<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting: ${esc(CATS[sheet.cat])}</button>`
+        :`<div class="alert alert-info" style="margin:0 0 14px">&#128227; Pick a category below, then open voting. Every judge scores this house in that category.</div>`;
     return;
   }
   const rows=Cloud.judges.map(j=>{const st=judgeStatus(j,called);
@@ -726,7 +734,7 @@ function renderCallbar(){
     $('callbar-go').textContent='View';
   }else{
     const mine=myVote(addr)||Cloud.judges.find(j=>j.uid===judgeId&&j.doneCallId===c.callId);
-    $('callbar-text').innerHTML=`<b>Now judging: ${esc(addr)}</b>${mine?'Done · waiting for the host':'The host opened voting'}`;
+    $('callbar-text').innerHTML=`<b>Now judging: ${esc(addr)}</b>${mine?'Done · waiting for the host':c.cat?esc(CATS[c.cat]):'The host opened voting'}`;
     $('callbar-go').textContent=mine?'Edit':'Score it';
   }
   bar.classList.add('show');
@@ -798,7 +806,7 @@ function showScreen(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===(name==='street'?'streets':name)));
   ({streets:renderStreets,'my-votes':renderMyVotes,results:renderResults,export:renderExport})[name]?.();
 }
-function renderAll(){renderStreets();renderSessionCard();renderStreet();renderMyVotes();renderResults();renderExport();renderHostPanel();renderCallbar();}
+function renderAll(){renderStreets();renderSessionCard();renderStreet();renderMyVotes();renderResults();renderExport();renderHostPanel();renderCallbar();if(sheet.open)renderSheet();}
 let toastTimer;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 
@@ -808,7 +816,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.tab){showScreen(t.dataset.tab);window.scrollTo(0,0);return;}
   if(t.dataset.street){openStreet(t.dataset.street);return;}
   if(t.dataset.house){openSheet(t.dataset.house);return;}
-  if(t.dataset.cat){sheet.cat=t.dataset.cat;sheet.dirty=true;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();return;}
+  if(t.dataset.cat){if(lockedCat())return;sheet.cat=t.dataset.cat;sheet.dirty=true;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();renderHostPanel();return;}
   if(t.dataset.star){sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;sheet.dirty=true;renderSheet();return;}
   if(t.dataset.makeHost){makeHost(t.dataset.makeHost);return;}
   if(t.dataset.removeJudge){
@@ -822,7 +830,7 @@ document.addEventListener('click',e=>{
     'close-sheet':closeSheet,'save-next':saveVote,'skip-house':skipHouse,'clear-house':clearHouse,
     'remove-photo':()=>{setPhoto(null);sheet.dirty=true;},export:exportCSV,'clear-all':clearAll,
     'start-session':startSession,'join-session':()=>joinSession(),invite,'leave-session':leaveSession,
-    'call-house':()=>{if(!Cloud.session.current)Cloud.callHouse(sheet.street,sheet.num);},
+    'call-house':()=>{if(!Cloud.session.current&&sheet.cat)Cloud.callHouse(sheet.street,sheet.num,sheet.cat);},
     'close-voting':closeVoting,
     'pick-host':()=>{pickingHost=true;renderSessionCard();},'cancel-pick-host':()=>{pickingHost=false;renderSessionCard();},
     'claim-host':claimHost,'go-call':goToCall,

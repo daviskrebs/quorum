@@ -23,7 +23,7 @@ Streets → pick a street → houses shown odd side / even side → tap a house 
 ## Live sync (Firebase)
 With `firebase.config.js` filled in, votes and photos sync to Firestore under `contests/{YEAR}`. Standings are live for every judge, and phones that lose signal catch up when they reconnect. With it set to `null`, votes stay on each phone and judges export CSVs.
 
-**Judging sessions:** one person taps **Start session** and shares the 4-letter code or invite link. When the host opens a house and taps **Open voting**, every judge's phone jumps to that house. The host sees who has scored, skipped, or is still deciding. Saving moves the whole group to the next house.
+**Judging sessions:** one person taps **Start session** and shares the 4-letter code or invite link. When the host opens a house and taps **Open voting**, every judge's phone jumps to that house. The host sees who has scored, skipped, or is still deciding, and taps **Close voting** when everyone is done (saving their own vote does not close it). After voting, phones return to the street's house list.
 
 **Setup:** paste `firestore.rules` into Firebase console → Firestore → Rules → Publish. Re-paste it whenever it changes.
 

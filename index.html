@@ -299,7 +299,7 @@
     </div>
   </div>
   <div class="sheet-actions">
-    <button class="btn btn-primary" data-action="save-next">Save &amp; next house</button>
+    <button class="btn btn-primary" data-action="save-next">Save vote</button>
     <div class="btn-row">
       <button class="btn btn-ghost" data-action="skip-house">No display &middot; skip</button>
       <button class="btn btn-ghost" data-action="clear-house" id="clear-house-btn">Clear</button>
@@ -521,25 +521,26 @@ function handlePhoto(file){
   };
   img.src=URL.createObjectURL(file);
 }
-function nextOpenHouse(after){
-  const votes=getVotes(),skips=getSkips();
-  const all=housesOn(currentStreet).all;const i=all.indexOf(after);
-  return [...all.slice(i+1),...all.slice(0,i)].find(n=>houseState(n,currentStreet,votes,skips).state==='open');
-}
 // The house the host has called, if this sheet is showing it.
 function calledHere(){
   const c=CLOUD&&Cloud.session&&Cloud.session.current;
   return c&&c.street===sheet.street&&c.num===String(sheet.num)?c:null;
 }
-function advance(){
+// After saving or skipping, go back to the street's house list (not every house is decorated,
+// so there's no sensible "next house"). The host stays on an open house to watch votes come in;
+// only Close voting ends it.
+function afterVote(msg){
   renderStreet();
   const called=calledHere();
-  // Judges in a session wait for the host to call the next house.
-  if(called&&!Cloud.isHost()){Cloud.markDone(called.callId);closeSheet();toast('Saved · waiting for the host');return;}
-  const next=nextOpenHouse(sheet.num);
-  if(called&&Cloud.isHost())Cloud.callHouse(next?currentStreet:null,next);
-  if(next)openSheet(next);
-  else{closeSheet();toast('Street complete!');}
+  if(called&&Cloud.isHost()){sheet.dirty=false;$('sheet-status').textContent='Your vote is saved. Close voting when everyone is done.';renderHostPanel();$('sheet').scrollTo({top:0,behavior:'smooth'});toast(msg);return;}
+  if(called){Cloud.markDone(called.callId);closeSheet();toast(msg+' · waiting for the host');return;}
+  closeSheet();toast(msg);
+}
+function closeVoting(){
+  const c=calledHere()||(Cloud.session&&Cloud.session.current);if(!c)return;
+  const waiting=Cloud.judges.filter(j=>judgeStatus(j,c).cls==='st-wait').map(j=>j.name);
+  if(waiting.length&&!confirm(`Still waiting on ${waiting.join(', ')}. Close voting anyway?`))return;
+  Cloud.callHouse(null);closeSheet();toast('Voting closed');
 }
 function saveVote(){
   const {cat,scores:s}=sheet;
@@ -554,13 +555,13 @@ function saveVote(){
     uniqueDesign:cat==='anything'?s.unique:null,notes:$('notes-input').value.trim(),total};
   if(!writeVote(vote,sheet.photo))return;
   const skips=getSkips();if(skips[a]){delete skips[a];store.set('luth_skips',skips);}
-  toast('Saved '+a);advance();
+  afterVote('Saved '+a);
 }
 function skipHouse(){
   const a=addrOf(sheet.num,currentStreet);
   if(myVote(a))deleteVote(a);
   const skips=getSkips();skips[a]=true;store.set('luth_skips',skips);
-  advance();
+  afterVote('Skipped '+a);
 }
 function clearHouse(){
   const a=addrOf(sheet.num,currentStreet);
@@ -668,14 +669,16 @@ function renderHostPanel(){
     return;
   }
   if(!called){
-    el.innerHTML='<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting for this house</button>';
+    const other=Cloud.session.current;
+    el.innerHTML=`<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting for this house</button>`
+      +(other?`<p class="muted" style="font-size:12px;margin:-8px 0 12px">This closes voting on ${esc(addrOf(other.num,other.street))}.</p>`:'');
     return;
   }
   const rows=Cloud.judges.map(j=>{const st=judgeStatus(j,called);return `<div class="row"><span>${esc(j.name)}${j.uid===judgeId?' (you)':''}</span><span class="${st.cls}">${st.text}</span></div>`;}).join('');
   const done=Cloud.judges.filter(j=>judgeStatus(j,called).cls!=='st-wait').length;
   el.innerHTML=`<div class="host-panel"><div style="display:flex;justify-content:space-between;margin-bottom:6px">
     <b style="color:var(--green)">&#128227; Voting open</b><span class="muted">${done} of ${Cloud.judges.length} done</span></div>${rows}
-    <p class="muted" style="font-size:12px;margin-top:6px">Saving or skipping moves every judge to the next house.</p></div>`;
+    <button class="btn btn-secondary" style="margin-top:10px" data-action="close-voting">Close voting${done<Cloud.judges.length?` (${Cloud.judges.length-done} waiting)`:''}</button></div>`;
 }
 function renderCallbar(){
   const c=CLOUD&&Cloud.session&&Cloud.session.current;
@@ -699,10 +702,19 @@ function goToCall(){
   if(!housesOn(c.street).all.includes(c.num)){const ex=getExtras();(ex[c.street]=ex[c.street]||[]).push(c.num);store.set('luth_extra_houses',ex);}
   openStreet(c.street);openSheet(c.num);
 }
-let lastCallId=null;
+let lastCallId=null,openCall=null;
 // A judge's phone jumps to a newly called house, unless they're mid-way through scoring another.
 function onSessionUpdate(){
   const c=Cloud.session&&Cloud.session.current;
+  // Host closed voting: leave that house unless the judge is mid-score (they can still save).
+  if(openCall&&(!c||c.callId!==openCall.callId)&&!Cloud.isHost()){
+    const was=openCall;openCall=null;
+    if(sheet.open&&sheet.street===was.street&&sheet.num===was.num){
+      if(sheet.dirty)toast('Host closed voting. You can still save.');
+      else if(!c){closeSheet();toast('Host closed voting');}
+    }
+  }
+  if(c)openCall=c;
   if(!c||Cloud.isHost()||c.callId===lastCallId)return;
   lastCallId=c.callId;
   const addr=addrOf(c.num,c.street);
@@ -761,7 +773,11 @@ document.addEventListener('click',e=>{
     'close-sheet':closeSheet,'save-next':saveVote,'skip-house':skipHouse,'clear-house':clearHouse,
     'remove-photo':()=>{setPhoto(null);sheet.dirty=true;},export:exportCSV,'clear-all':clearAll,
     'start-session':startSession,'join-session':()=>joinSession(),invite,'leave-session':leaveSession,
-    'call-house':()=>{Cloud.callHouse(sheet.street,sheet.num);},'go-call':goToCall,
+    'call-house':()=>{
+      const o=Cloud.session.current;
+      if(o&&!confirm(`Close voting on ${addrOf(o.num,o.street)} and open this house?`))return;
+      Cloud.callHouse(sheet.street,sheet.num);},
+    'close-voting':closeVoting,'go-call':goToCall,
   })[t.dataset.action]?.();
 });
 $('photo-input').addEventListener('change',e=>handlePhoto(e.target.files[0]));

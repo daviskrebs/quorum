@@ -71,6 +71,7 @@
   /* Street detail: houses laid out like the street itself */
   .sides{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .sides-head{margin-bottom:-4px}
+  .sides.one{grid-template-columns:1fr}
   .block-head{font-size:12px;font-weight:700;color:var(--green);margin:14px 2px 6px;display:flex;align-items:center;gap:8px}
   .block-head::after{content:'';flex:1;height:1px;background:var(--line)}
   .block:first-child .block-head{margin-top:4px}
@@ -194,7 +195,7 @@
     </header>
     <div class="pad">
       <div id="street-nodata" class="alert alert-warn" style="display:none">No address list loaded for this street yet. Add houses as you reach them.</div>
-      <div class="sides sides-head"><div class="side-head">Odd side</div><div class="side-head">Even side</div></div>
+      <div class="sides sides-head" id="sides-head"></div>
       <div id="blocks"></div>
       <div class="add-row">
         <input type="text" inputmode="numeric" pattern="[0-9]*" id="add-house-input" placeholder="House not listed? #">
@@ -450,8 +451,13 @@ function renderStreet(){
   const blocks=new Map();
   all.forEach(n=>{const b=Math.floor(parseInt(n,10)/100)*100;if(!blocks.has(b))blocks.set(b,[]);blocks.get(b).push(n);});
   const side=list=>`<div class="houses">${list.map(chip).join('')||'<div class="empty-side">None</div>'}</div>`;
+  // Boundary streets are judged on the Bellevue side only, shown as one column.
+  const cfg=STREETS.find(s=>s.name===street)||{};
+  const one=!!cfg.side;
+  $('sides-head').className='sides sides-head'+(one?' one':'');
+  $('sides-head').innerHTML=one?`<div class="side-head">${esc(cfg.sideLabel||'Bellevue side')} only</div>`:'<div class="side-head">Odd side</div><div class="side-head">Even side</div>';
   $('blocks').innerHTML=[...blocks].map(([b,list])=>`<div class="block"><div class="block-head">${b} block</div>
-    <div class="sides">${side(list.filter(n=>parseInt(n,10)%2===1))}${side(list.filter(n=>parseInt(n,10)%2===0))}</div></div>`).join('');
+    <div class="sides${one?' one':''}">${one?side(list):side(list.filter(n=>parseInt(n,10)%2===1))+side(list.filter(n=>parseInt(n,10)%2===0))}</div></div>`).join('');
 }
 function addHouse(){
   const input=$('add-house-input');const n=input.value.trim().toUpperCase();

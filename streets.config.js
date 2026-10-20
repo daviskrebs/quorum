@@ -2,6 +2,8 @@
 // edge: which side of the neighborhood a boundary street forms. The importer traces the
 // outline from these and keeps only addresses inside it.
 // range: optional [min, max] house-number filter, if the outline ever needs help.
+// side: on boundary streets only the Bellevue side is judged. Odd/even was checked
+// against map coordinates of neighboring houses.
 // House numbers themselves come from addresses.js (real address points).
 var LUTH_CONFIG = {
   // Contest year. Synced votes are stored per year so seasons never mix.
@@ -30,11 +32,11 @@ var LUTH_CONFIG = {
     { name: 'Warren Avenue' },
     { name: 'Westminster Avenue' },
     { name: 'Windsor Avenue' },
-    { name: 'Hermitage Road', boundary: true, edge: 'west' },
-    { name: 'Brook Road', boundary: true, edge: 'east' },
+    { name: 'Hermitage Road', boundary: true, edge: 'west', side: 'odd', sideLabel: 'East side' },
+    { name: 'Brook Road', boundary: true, edge: 'east', side: 'even', sideLabel: 'West side' },
     // The 1700 block sits across Hermitage, outside Bellevue.
-    { name: 'W Laburnum Avenue', boundary: true, edge: 'south', range: [1100, 1699] },
-    { name: 'Westbrook Avenue', boundary: true, edge: 'north' },
+    { name: 'W Laburnum Avenue', boundary: true, edge: 'south', range: [1100, 1699], side: 'even', sideLabel: 'North side' },
+    { name: 'Westbrook Avenue', boundary: true, edge: 'north', side: 'odd', sideLabel: 'South side' },
   ],
 };
 if (typeof module !== 'undefined') module.exports = LUTH_CONFIG;

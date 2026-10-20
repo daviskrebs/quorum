@@ -126,7 +126,8 @@ const out = new Map(STREETS.map(s => [s.name, new Set()])), outside = new Map(ST
 for (const p of parsed) {
   const n = parseInt(p.num, 10);
   const inRange = !p.s.range || (n >= p.s.range[0] && n <= p.s.range[1]);
-  if (inside(p) && inRange) out.get(p.s.name).add(p.num);
+  const onSide = !p.s.side || (n % 2 === 1) === (p.s.side === 'odd');
+  if (inside(p) && inRange && onSide) out.get(p.s.name).add(p.num);
   else outside.set(p.s.name, outside.get(p.s.name) + 1);
 }
 
@@ -134,7 +135,7 @@ const streets = {};
 console.log(`Source: ${source} (${rows.length} address points)\n`);
 for (const s of STREETS) {
   const list = streets[s.name] = [...out.get(s.name)].sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || a.localeCompare(b));
-  const note = outside.get(s.name) ? `  (${outside.get(s.name)} points outside Bellevue)` : '';
+  const note = outside.get(s.name) ? `  (${outside.get(s.name)} points outside Bellevue${s.side ? ' or on the far side' : ''})` : '';
   const warn = list.length ? '' : '  <-- none inside the outline; is this street in the contest?';
   console.log(`${s.name.padEnd(20)} ${String(list.length).padStart(4)} houses  ${list[0] ?? '-'}..${list.at(-1) ?? '-'}${note}${warn}`);
 }

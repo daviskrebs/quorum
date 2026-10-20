@@ -22,7 +22,7 @@
   html,body{background:var(--bg)}
   body{font-family:'DM Sans',-apple-system,sans-serif;color:var(--ink);min-height:100vh;-webkit-font-smoothing:antialiased}
   button{font-family:inherit;color:inherit}
-  .app{max-width:520px;margin:0 auto;padding-bottom:calc(72px + var(--safe-bot))}
+  .app{max-width:520px;margin:0 auto;padding-bottom:calc(140px + var(--safe-bot))}
 
   /* Header */
   .header{background:var(--green);padding:calc(14px + var(--safe-top)) 16px 14px;color:#fff;position:sticky;top:0;z-index:20}
@@ -138,7 +138,22 @@
   .cat-wonderful{background:#FDE8E8;color:#8B1A1A}.cat-anything{background:#E8F4FD;color:#1A4A7A}
   .cat-tree{background:#E8FDE8;color:#1A5C1A}.cat-doors{background:#FDF5E8;color:#7A5A00}
   .empty-state{text-align:center;padding:32px 16px;color:#aaa;font-size:14px}
-  .toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-bot));transform:translateX(-50%) translateY(20px);background:var(--green);color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;white-space:nowrap}
+  /* Sessions */
+  .session-code{font-family:'Playfair Display',serif;font-size:28px;letter-spacing:.12em;color:var(--green)}
+  .judge-pills{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+  .judge-pill{background:#F2EEE2;border-radius:20px;padding:4px 10px;font-size:12px}
+  .judge-pill.host{background:var(--cream)}
+  .offline{display:inline-block;background:#FFF3CD;color:#7A5A00;border-radius:20px;padding:2px 8px;font-size:11px;margin-left:6px}
+  .callbar{position:fixed;left:0;right:0;bottom:calc(58px + var(--safe-bot));z-index:35;display:none;justify-content:center;padding:0 12px 8px}
+  .callbar.show{display:flex}
+  .callbar-inner{width:100%;max-width:496px;background:var(--gold);color:#fff;border-radius:14px;padding:10px 12px 10px 14px;display:flex;align-items:center;gap:10px;box-shadow:0 6px 18px rgba(0,0,0,.18);cursor:pointer;border:none;text-align:left;font-size:14px}
+  .callbar-inner b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .callbar-inner .go{background:rgba(255,255,255,.25);border-radius:10px;padding:8px 12px;font-weight:700;flex-shrink:0}
+  .host-panel{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:14px}
+  .host-panel .row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:14px;border-bottom:1px solid #F4F0E4}
+  .host-panel .row:last-child{border-bottom:none}
+  .st-done{color:var(--green);font-weight:700}.st-skip{color:#999}.st-wait{color:var(--gold)}
+  .toast{position:fixed;left:50%;top:calc(14px + var(--safe-top));transform:translateX(-50%) translateY(-20px);background:var(--green);color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;white-space:nowrap}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
 </head>
@@ -156,6 +171,7 @@
     </header>
     <div class="pad">
       <div id="data-warning" class="alert alert-warn" style="display:none"></div>
+      <div id="session-card"></div>
       <div id="street-groups"></div>
     </div>
   </section>
@@ -201,7 +217,7 @@
 
   <!-- RESULTS -->
   <section id="screen-results" class="screen">
-    <header class="header"><h1>Standings</h1><div class="sub">From votes on this device only</div></header>
+    <header class="header"><h1>Standings</h1><div class="sub" id="results-sub">From votes on this device only</div></header>
     <div class="pad" id="results-content"></div>
   </section>
 
@@ -211,13 +227,13 @@
     <div class="pad">
       <div class="card">
         <div class="card-title">Export votes</div>
-        <p class="muted" style="margin-bottom:12px">Download a CSV of this device's votes. The organizer merges every judge's CSV to pick winners.</p>
+        <p class="muted" style="margin-bottom:12px" id="export-desc">Download a CSV of this device's votes. The organizer merges every judge's CSV to pick winners.</p>
         <div class="stats-grid">
           <div class="stat-card"><div class="stat-num" id="export-count">0</div><div class="stat-label">Votes</div></div>
           <div class="stat-card"><div class="stat-num" id="export-houses">0</div><div class="stat-label">Addresses</div></div>
         </div>
         <button class="btn btn-primary" data-action="export">Download CSV</button>
-        <button class="btn btn-danger" data-action="clear-all">Clear all data on this device</button>
+        <button class="btn btn-danger" data-action="clear-all" id="clear-all-btn">Clear all data on this device</button>
       </div>
       <div class="card">
         <div class="card-title">Address data</div>
@@ -226,6 +242,10 @@
     </div>
   </section>
 </div>
+
+<div class="callbar" id="callbar"><button class="callbar-inner" data-action="go-call">
+  <span style="font-size:22px">&#128227;</span><span style="flex:1;min-width:0" id="callbar-text"></span><span class="go" id="callbar-go">Score it</span>
+</button></div>
 
 <nav class="tabbar"><div class="tabbar-inner">
   <button class="tab active" data-tab="streets"><span class="ico">&#127968;</span>Streets</button>
@@ -242,6 +262,7 @@
     <div><div class="sheet-addr" id="sheet-addr"></div><div class="muted" id="sheet-status"></div></div>
     <button class="sheet-close" data-action="close-sheet" aria-label="Close">&#215;</button>
   </div>
+  <div id="host-panel"></div>
   <label>Category</label>
   <div class="chips" id="cat-chips"></div>
   <div id="score-fields">
@@ -287,6 +308,9 @@
 
 <script src="streets.config.js"></script>
 <script src="addresses.js"></script>
+<script src="vendor/firebase.js"></script>
+<script src="firebase.config.js"></script>
+<script src="sync.js"></script>
 <script>
 const CATS_LIST=[
   {key:'wonderful',label:"It's a Wonderful Life",sub:'Traditional, no inflatables'},
@@ -307,7 +331,37 @@ const store={
   get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch{return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch{toast('Storage full: export and remove photos');return false}},
 };
-const getVotes=()=>store.get('luth_votes',[]);
+const CLOUD=Cloud.enabled;
+const getVotes=()=>CLOUD?Cloud.votes:store.get('luth_votes',[]);
+// Save or remove this judge's vote. Cloud mode keeps photos in their own documents.
+function writeVote(vote,photo){
+  if(CLOUD){Cloud.putVote(vote,photo);return true;}
+  const votes=getVotes();const i=votes.findIndex(v=>v.address===vote.address&&v.judgeId===judgeId);
+  vote.photo=photo||null;
+  if(i>=0)votes[i]=vote;else votes.push(vote);
+  return store.set('luth_votes',votes);
+}
+function deleteVote(address){
+  if(CLOUD){Cloud.removeVote(address);return;}
+  store.set('luth_votes',getVotes().filter(v=>!(v.address===address&&v.judgeId===judgeId)));
+}
+function myVote(address){return getVotes().find(v=>v.address===address&&v.judgeId===judgeId);}
+// Photo markup; cloud photos load after render (see fillPhotos).
+function thumb(v){
+  if(v&&v.photo)return `<img class="thumb" src="${v.photo}" alt="">`;
+  if(v&&v.hasPhoto&&CLOUD)return `<img class="thumb" data-photo-id="${esc(v.id)}" alt="">`;
+  return '<div class="thumb">&#127968;</div>';
+}
+function fillPhotos(root){
+  root.querySelectorAll('img[data-photo-id]:not([src])').forEach(img=>{
+    Cloud.photo(img.dataset.photoId).then(src=>{if(src)img.src=src;}).catch(()=>{});
+  });
+}
+function judgeName(){
+  let n=store.get('luth_judge_name','');
+  while(!n){n=(prompt('Your name (shown to the other judges)')||'').trim();if(!n)return null;}
+  store.set('luth_judge_name',n);return n;
+}
 const getSkips=()=>store.get('luth_skips',{});        // {address:true}
 const getExtras=()=>store.get('luth_extra_houses',{}); // {street:[num]}
 
@@ -316,7 +370,7 @@ function getJudgeId(){
   if(!id){id='J'+Math.random().toString(36).slice(2,8).toUpperCase();store.set('luth_judge_id',id);}
   return id;
 }
-const judgeId=getJudgeId();
+let judgeId=CLOUD?null:getJudgeId(); // Cloud mode: set to the Firebase user id once signed in.
 const addrOf=(num,street)=>num+' '+street;
 
 // ---------- Houses on a street ----------
@@ -416,22 +470,23 @@ function shareStreet(){
 }
 
 // ---------- Score sheet ----------
-let sheet={num:null,cat:null,scores:{curb:0,overall:0,unique:0},photo:null};
+let sheet={num:null,cat:null,scores:{curb:0,overall:0,unique:0},photo:null,dirty:false,open:false};
 function openSheet(num,presetCat){
   const a=addrOf(num,currentStreet);
-  const existing=getVotes().find(v=>v.address===a&&v.judgeId===judgeId);
-  sheet={num,cat:existing?existing.category:(presetCat||null),
+  const existing=myVote(a);
+  sheet={num,street:currentStreet,cat:existing?existing.category:(presetCat||null),
     scores:existing?{curb:existing.curbAppeal,overall:existing.overallPresentation,unique:existing.uniqueDesign||0}:{curb:0,overall:0,unique:0},
-    photo:existing?existing.photo:null};
+    photo:existing?existing.photo||null:null,dirty:false,open:true};
+  if(existing&&existing.hasPhoto&&CLOUD)Cloud.photo(existing.id).then(p=>{if(sheet.open&&sheet.num===num&&!sheet.photo)setPhoto(p);});
   $('sheet-addr').textContent=a;
   $('sheet-status').textContent=existing?'Already scored. Saving updates your vote.':getSkips()[a]?'Marked as no display':'';
   $('clear-house-btn').style.display=(existing||getSkips()[a])?'':'none';
   $('notes-input').value=existing?existing.notes:'';
-  renderSheet();setPhoto(sheet.photo);
+  renderSheet();setPhoto(sheet.photo);renderHostPanel();
   $('sheet').scrollTop=0;
   $('sheet').classList.add('open');$('sheet-backdrop').classList.add('open');
 }
-function closeSheet(){$('sheet').classList.remove('open');$('sheet-backdrop').classList.remove('open');}
+function closeSheet(){sheet.open=false;$('sheet').classList.remove('open');$('sheet-backdrop').classList.remove('open');renderCallbar();}
 function renderSheet(){
   $('cat-chips').innerHTML=CATS_LIST.map(c=>`<button class="chip${sheet.cat===c.key?' on':''}" data-cat="${c.key}">${esc(c.label)}</button>`).join('');
   $('unique-group').style.display=sheet.cat==='anything'?'':'none';
@@ -451,7 +506,7 @@ function handlePhoto(file){
   img.onload=()=>{
     const MAX=600;let w=img.width,h=img.height;if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
     const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);
-    URL.revokeObjectURL(img.src);setPhoto(cv.toDataURL('image/jpeg',0.7));
+    URL.revokeObjectURL(img.src);setPhoto(cv.toDataURL('image/jpeg',0.7));sheet.dirty=true;
   };
   img.src=URL.createObjectURL(file);
 }
@@ -460,38 +515,46 @@ function nextOpenHouse(after){
   const all=housesOn(currentStreet).all;const i=all.indexOf(after);
   return [...all.slice(i+1),...all.slice(0,i)].find(n=>houseState(n,currentStreet,votes,skips).state==='open');
 }
+// The house the host has called, if this sheet is showing it.
+function calledHere(){
+  const c=CLOUD&&Cloud.session&&Cloud.session.current;
+  return c&&c.street===sheet.street&&c.num===String(sheet.num)?c:null;
+}
 function advance(){
   renderStreet();
+  const called=calledHere();
+  // Judges in a session wait for the host to call the next house.
+  if(called&&!Cloud.isHost()){Cloud.markDone(called.callId);closeSheet();toast('Saved · waiting for the host');return;}
   const next=nextOpenHouse(sheet.num);
+  if(called&&Cloud.isHost())Cloud.callHouse(next?currentStreet:null,next);
   if(next)openSheet(next);
   else{closeSheet();toast('Street complete!');}
 }
 function saveVote(){
   const {cat,scores:s}=sheet;
+  if(CLOUD&&!judgeId){toast('Still connecting. Try again in a moment.');return;}
   if(!cat){toast('Pick a category');return;}
   if(!s.curb||!s.overall){toast('Rate Curb Appeal and Overall');return;}
   if(cat==='anything'&&!s.unique){toast('Rate Unique Design');return;}
   const a=addrOf(sheet.num,currentStreet);
   const total=cat==='anything'?Math.round((s.curb+s.overall+s.unique)/3*10)/10:Math.round((s.curb+s.overall)/2*10)/10;
-  const vote={judgeId,timestamp:new Date().toISOString(),address:a,street:currentStreet,houseNum:String(sheet.num),
+  const vote={judgeId,judgeName:store.get('luth_judge_name','')||null,timestamp:new Date().toISOString(),address:a,street:currentStreet,houseNum:String(sheet.num),
     category:cat,categoryName:CATS[cat],curbAppeal:s.curb,overallPresentation:s.overall,
-    uniqueDesign:cat==='anything'?s.unique:null,notes:$('notes-input').value.trim(),photo:sheet.photo,total};
-  const votes=getVotes();const i=votes.findIndex(v=>v.address===a&&v.judgeId===judgeId);
-  if(i>=0)votes[i]=vote;else votes.push(vote);
-  if(!store.set('luth_votes',votes))return;
+    uniqueDesign:cat==='anything'?s.unique:null,notes:$('notes-input').value.trim(),total};
+  if(!writeVote(vote,sheet.photo))return;
   const skips=getSkips();if(skips[a]){delete skips[a];store.set('luth_skips',skips);}
   toast('Saved '+a);advance();
 }
 function skipHouse(){
   const a=addrOf(sheet.num,currentStreet);
-  store.set('luth_votes',getVotes().filter(v=>!(v.address===a&&v.judgeId===judgeId)));
+  if(myVote(a))deleteVote(a);
   const skips=getSkips();skips[a]=true;store.set('luth_skips',skips);
   advance();
 }
 function clearHouse(){
   const a=addrOf(sheet.num,currentStreet);
   if(!confirm('Clear your vote for '+a+'?'))return;
-  store.set('luth_votes',getVotes().filter(v=>!(v.address===a&&v.judgeId===judgeId)));
+  if(myVote(a))deleteVote(a);
   const skips=getSkips();delete skips[a];store.set('luth_skips',skips);
   closeSheet();renderStreet();
 }
@@ -503,19 +566,20 @@ function renderMyVotes(){
   $('my-avg-score').textContent=votes.length?(votes.reduce((a,v)=>a+v.total,0)/votes.length).toFixed(1):'—';
   $('my-votes-list').innerHTML=votes.length?votes.map(v=>`
     <div class="vote-item" data-edit-street="${esc(v.street)}" data-edit-num="${esc(v.houseNum)}">
-      ${v.photo?`<img class="thumb" src="${v.photo}" alt="">`:'<div class="thumb">&#127968;</div>'}
+      ${thumb(v)}
       <div style="flex:1;min-width:0"><div class="vote-addr">${esc(v.address)}</div>
         <span class="cat-badge cat-${esc(v.category)}">${esc(v.categoryName)}</span>
         ${v.notes?`<div class="muted" style="font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.notes)}</div>`:''}</div>
       <div class="vote-score">&#11088;${v.total}</div></div>`).join('')
     :'<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127968;</div>No votes yet. Pick a street to start.</div>';
+  if(CLOUD)fillPhotos($('my-votes-list'));
 }
 function renderResults(){
   const groups={};
   getVotes().forEach(v=>{
     const g=groups[v.category]=groups[v.category]||{};
-    const h=g[v.address]=g[v.address]||{address:v.address,totals:[],photo:null};
-    h.totals.push(v.total);if(v.photo&&!h.photo)h.photo=v.photo;
+    const h=g[v.address]=g[v.address]||{address:v.address,totals:[],photoVote:null};
+    h.totals.push(v.total);if((v.photo||v.hasPhoto)&&!h.photoVote)h.photoVote=v;
   });
   const el=$('results-content');
   if(!Object.keys(groups).length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127942;</div>No votes yet.</div>';return;}
@@ -523,11 +587,12 @@ function renderResults(){
     const ranked=Object.values(groups[c.key]).map(h=>({...h,avg:Math.round(h.totals.reduce((a,b)=>a+b,0)/h.totals.length*10)/10})).sort((a,b)=>b.avg-a.avg);
     return `<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0">${esc(c.label)}</div>
       ${ranked.map((h,i)=>`<div class="vote-item" style="cursor:default">
-        ${h.photo?`<img class="thumb" src="${h.photo}" alt="">`:'<div class="thumb">&#127968;</div>'}
+        ${thumb(h.photoVote)}
         <div style="flex:1"><div class="vote-addr">${['&#129351; ','&#129352; ','&#129353; '][i]||''}${esc(h.address)}</div>
         <div class="muted" style="font-size:11px">${h.totals.length} vote${h.totals.length!==1?'s':''}</div></div>
         <div class="vote-score">${h.avg}</div></div>`).join('')}</div>`;
   }).join('');
+  if(CLOUD)fillPhotos(el);
 }
 function renderExport(){
   const votes=getVotes();
@@ -541,17 +606,122 @@ function renderExport(){
 }
 function exportCSV(){
   const votes=getVotes();if(!votes.length){toast('No votes to export');return;}
-  const headers=['judgeId','timestamp','address','street','houseNum','category','categoryName','curbAppeal','overallPresentation','uniqueDesign','total','notes','hasPhoto'];
+  const headers=['judgeId','judgeName','timestamp','address','street','houseNum','category','categoryName','curbAppeal','overallPresentation','uniqueDesign','total','notes','hasPhoto'];
   const cell=v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  const rows=votes.map(v=>headers.map(h=>cell(h==='hasPhoto'?(v.photo?'yes':'no'):v[h])).join(','));
+  const rows=votes.map(v=>headers.map(h=>cell(h==='hasPhoto'?(v.photo||v.hasPhoto?'yes':'no'):v[h])).join(','));
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([[headers.join(','),...rows].join('\n')],{type:'text/csv'}));
-  a.download=`luth_votes_${judgeId}_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  a.download=`luth_votes_${CLOUD?'all_judges':judgeId}_${new Date().toISOString().slice(0,10)}.csv`;a.click();
 }
 function clearAll(){
   if(!confirm('Delete ALL votes, skips, and added houses on this device? This cannot be undone.'))return;
   ['luth_votes','luth_skips','luth_extra_houses'].forEach(k=>localStorage.removeItem(k));
   renderAll();toast('Cleared');
+}
+
+// ---------- Judging sessions (cloud only) ----------
+function renderSessionCard(){
+  const el=$('session-card');
+  if(!CLOUD){el.innerHTML='';return;}
+  const off=Cloud.online?'':'<span class="offline">Offline · will sync</span>';
+  if(!Cloud.sessionCode){
+    el.innerHTML=`<div class="card"><div class="card-title">Judging as a group?${off}</div>
+      <p class="muted" style="margin-bottom:4px">The host opens voting on each house and sees who has voted. Votes sync to everyone either way.</p>
+      <div class="btn-row"><button class="btn btn-primary" data-action="start-session">Start session</button>
+      <button class="btn btn-secondary" data-action="join-session">Join with code</button></div></div>`;
+    return;
+  }
+  const s=Cloud.session;
+  const host=Cloud.isHost();
+  const pills=Cloud.judges.map(j=>`<span class="judge-pill${s&&j.uid===s.hostUid?' host':''}">${esc(j.name)}${s&&j.uid===s.hostUid?' · host':''}</span>`).join('');
+  el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <div><div class="muted">Session code${off}</div><div class="session-code">${esc(Cloud.sessionCode)}</div></div>
+      <div class="muted" style="text-align:right">${host?'You are the host':s?'Host: '+esc(s.hostName):'Connecting...'}</div></div>
+    <div class="judge-pills">${pills}</div>
+    ${host?'<p class="muted" style="margin:6px 0 0">Open a street and tap a house, then tap <b>Open voting</b>.</p>':''}
+    <div class="btn-row"><button class="btn btn-secondary" data-action="invite">Invite judges</button>
+    <button class="btn btn-ghost" data-action="leave-session">Leave</button></div></div>`;
+}
+function judgeStatus(j,c){
+  const v=getVotes().find(v=>v.judgeId===j.uid&&v.address===addrOf(c.num,c.street));
+  if(v)return{cls:'st-done',text:'&#10003; '+v.total};
+  if(j.doneCallId===c.callId)return{cls:'st-skip',text:'skipped'};
+  return{cls:'st-wait',text:'waiting'};
+}
+function renderHostPanel(){
+  const el=$('host-panel');
+  if(!CLOUD||!Cloud.session||!sheet.open){el.innerHTML='';return;}
+  const called=calledHere();
+  if(!Cloud.isHost()){
+    el.innerHTML=called?'<div class="alert alert-info" style="margin:0 0 12px">&#128227; The host opened voting on this house.</div>':'';
+    return;
+  }
+  if(!called){
+    el.innerHTML='<button class="btn btn-gold" style="margin:0 0 14px" data-action="call-house">&#128227; Open voting for this house</button>';
+    return;
+  }
+  const rows=Cloud.judges.map(j=>{const st=judgeStatus(j,called);return `<div class="row"><span>${esc(j.name)}${j.uid===judgeId?' (you)':''}</span><span class="${st.cls}">${st.text}</span></div>`;}).join('');
+  const done=Cloud.judges.filter(j=>judgeStatus(j,called).cls!=='st-wait').length;
+  el.innerHTML=`<div class="host-panel"><div style="display:flex;justify-content:space-between;margin-bottom:6px">
+    <b style="color:var(--green)">&#128227; Voting open</b><span class="muted">${done} of ${Cloud.judges.length} done</span></div>${rows}
+    <p class="muted" style="font-size:12px;margin-top:6px">Saving or skipping moves every judge to the next house.</p></div>`;
+}
+function renderCallbar(){
+  const c=CLOUD&&Cloud.session&&Cloud.session.current;
+  const bar=$('callbar');
+  const here=sheet.open&&calledHere();
+  if(!c||here){bar.classList.remove('show');return;}
+  const addr=addrOf(c.num,c.street);
+  if(Cloud.isHost()){
+    const done=Cloud.judges.filter(j=>judgeStatus(j,c).cls!=='st-wait').length;
+    $('callbar-text').innerHTML=`<b>Voting open: ${esc(addr)}</b>${done} of ${Cloud.judges.length} judges done`;
+    $('callbar-go').textContent='View';
+  }else{
+    const mine=myVote(addr)||Cloud.judges.find(j=>j.uid===judgeId&&j.doneCallId===c.callId);
+    $('callbar-text').innerHTML=`<b>Now judging: ${esc(addr)}</b>${mine?'Done · waiting for the host':'The host opened voting'}`;
+    $('callbar-go').textContent=mine?'Edit':'Score it';
+  }
+  bar.classList.add('show');
+}
+function goToCall(){
+  const c=Cloud.session&&Cloud.session.current;if(!c)return;
+  if(!housesOn(c.street).all.includes(c.num)){const ex=getExtras();(ex[c.street]=ex[c.street]||[]).push(c.num);store.set('luth_extra_houses',ex);}
+  openStreet(c.street);openSheet(c.num);
+}
+let lastCallId=null;
+// A judge's phone jumps to a newly called house, unless they're mid-way through scoring another.
+function onSessionUpdate(){
+  const c=Cloud.session&&Cloud.session.current;
+  if(!c||Cloud.isHost()||c.callId===lastCallId)return;
+  lastCallId=c.callId;
+  const addr=addrOf(c.num,c.street);
+  const me=Cloud.judges.find(j=>j.uid===judgeId);
+  if(myVote(addr)||(me&&me.doneCallId===c.callId))return;
+  if(sheet.open&&sheet.dirty&&!calledHere()){toast('Host opened voting: '+addr);return;}
+  goToCall();toast('Host opened voting: '+addr);
+  if(navigator.vibrate)navigator.vibrate(150);
+}
+async function startSession(){
+  const name=judgeName();if(!name)return;
+  showIdentity();
+  try{const code=await Cloud.createSession(name);toast('Session '+code+' started');}
+  catch(e){toast(e.message);}
+}
+async function joinSession(code){
+  code=code||(prompt('Session code from the host')||'').trim();if(!code)return;
+  const name=judgeName();if(!name)return;
+  showIdentity();
+  try{await Cloud.joinSession(code,name);toast('Joined session '+code.toUpperCase());}
+  catch(e){toast(e.message);}
+}
+function invite(){
+  const url=location.href.split(/[?#]/)[0]+'?join='+Cloud.sessionCode;
+  if(navigator.share)navigator.share({title:'Judge Light Up the Hood',text:'Join judging session '+Cloud.sessionCode,url}).catch(()=>{});
+  else navigator.clipboard.writeText(url).then(()=>toast('Invite link copied'),()=>prompt('Copy this link',url));
+}
+function leaveSession(){
+  if(Cloud.isHost()&&!confirm('Leave this session? Judges will stop getting houses from you.'))return;
+  Cloud.leaveSession();
 }
 
 // ---------- Navigation ----------
@@ -562,7 +732,7 @@ function showScreen(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===(name==='street'?'streets':name)));
   ({streets:renderStreets,'my-votes':renderMyVotes,results:renderResults,export:renderExport})[name]?.();
 }
-function renderAll(){renderStreets();renderStreet();renderMyVotes();renderResults();renderExport();}
+function renderAll(){renderStreets();renderSessionCard();renderStreet();renderMyVotes();renderResults();renderExport();renderHostPanel();renderCallbar();}
 let toastTimer;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 
@@ -572,23 +742,46 @@ document.addEventListener('click',e=>{
   if(t.dataset.tab){showScreen(t.dataset.tab);window.scrollTo(0,0);return;}
   if(t.dataset.street){openStreet(t.dataset.street);return;}
   if(t.dataset.house){openSheet(t.dataset.house);return;}
-  if(t.dataset.cat){sheet.cat=t.dataset.cat;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();return;}
-  if(t.dataset.star){sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;renderSheet();return;}
+  if(t.dataset.cat){sheet.cat=t.dataset.cat;sheet.dirty=true;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();return;}
+  if(t.dataset.star){sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;sheet.dirty=true;renderSheet();return;}
   if(t.dataset.editStreet){openStreet(t.dataset.editStreet);openSheet(t.dataset.editNum);return;}
   ({
     back:()=>showScreen('streets'),'add-house':addHouse,'finish-street':finishStreet,'share-street':shareStreet,
     'close-sheet':closeSheet,'save-next':saveVote,'skip-house':skipHouse,'clear-house':clearHouse,
-    'remove-photo':()=>setPhoto(null),export:exportCSV,'clear-all':clearAll,
+    'remove-photo':()=>{setPhoto(null);sheet.dirty=true;},export:exportCSV,'clear-all':clearAll,
+    'start-session':startSession,'join-session':()=>joinSession(),invite,'leave-session':leaveSession,
+    'call-house':()=>{Cloud.callHouse(sheet.street,sheet.num);},'go-call':goToCall,
   })[t.dataset.action]?.();
 });
 $('photo-input').addEventListener('change',e=>handlePhoto(e.target.files[0]));
 $('add-house-input').addEventListener('keydown',e=>{if(e.key==='Enter')addHouse();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+$('notes-input').addEventListener('input',()=>{sheet.dirty=true;});
 
 // ---------- Boot ----------
-$('judge-badge').textContent='Judge '+judgeId;
-$('judge-id-display').textContent=judgeId;
-renderStreets();
+function showIdentity(){
+  const name=store.get('luth_judge_name','');
+  const label=name||(judgeId?'Judge '+judgeId.slice(0,6).toUpperCase():'Connecting...');
+  $('judge-badge').textContent=label;$('judge-id-display').textContent=label;
+}
+showIdentity();
+if(CLOUD){
+  $('results-sub').textContent='Live from every judge';
+  $('export-desc').textContent='Download a CSV of every judge\'s votes this year. Votes already sync live, so this is a backup.';
+  $('clear-all-btn').style.display='none';
+  Cloud.onChange(kind=>{
+    if(kind==='error')toast('Sync problem. Votes are saved and will retry.');
+    if(kind==='session-missing')toast('That session has ended');
+    if(kind==='session'||kind==='judges')onSessionUpdate();
+    renderAll();
+  });
+  Cloud.ready.then(uid=>{
+    judgeId=uid;showIdentity();renderAll();
+    const join=new URLSearchParams(location.search).get('join');
+    if(join&&join.toUpperCase()!==Cloud.sessionCode){history.replaceState(null,'',location.pathname);joinSession(join);}
+  }).catch(()=>toast('Could not connect to sync. Check your signal.'));
+}
+renderStreets();renderSessionCard();
 (function fromLink(){
   // ?street=Bellevue%20Avenue opens that street. Older links with &num=&cat= also open the score sheet.
   const p=new URLSearchParams(location.search);

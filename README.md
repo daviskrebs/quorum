@@ -20,4 +20,15 @@ Houses the data misses can be added in the app ("House not listed?"). They're sa
 ## Judging flow
 Streets → pick a street → houses shown odd side / even side → tap a house → score → **Save & next house** moves to the next unjudged house. **No display · skip** marks a house as reviewed. Each street shows progress.
 
-Votes stay on each judge's device. Export a CSV from the Export tab, and the organizer merges them.
+## Live sync (Firebase)
+With `firebase.config.js` filled in, votes and photos sync to Firestore under `contests/{YEAR}`. Standings are live for every judge, and phones that lose signal catch up when they reconnect. With it set to `null`, votes stay on each phone and judges export CSVs.
+
+**Judging sessions:** one person taps **Start session** and shares the 4-letter code or invite link. When the host opens a house and taps **Open voting**, every judge's phone jumps to that house. The host sees who has scored, skipped, or is still deciding. Saving moves the whole group to the next house.
+
+**Setup:** paste `firestore.rules` into Firebase console → Firestore → Rules → Publish. Re-paste it whenever it changes.
+
+**Each year:** bump `YEAR` in `streets.config.js` and rerun the address import.
+
+**Local testing:** `npx firebase-tools emulators:start --project demo-luth --only auth,firestore`, then set `useEmulator: true` and `projectId: 'demo-luth'` in a local copy of the config.
+
+`vendor/firebase.js` is the bundled Firebase SDK (`npm install && npm run build:firebase` to rebuild).

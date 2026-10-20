@@ -1,0 +1,40 @@
+rules_version = '2';
+// Paste into Firebase console → Firestore → Rules, then Publish.
+// Every phone signs in anonymously. A judge can only write their own votes and photos,
+// and only the session host can change which house is being judged.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function mine(id) { return id.matches(request.auth.uid + '__.+'); }
+    function star(v) { return v is int && v >= 1 && v <= 5; }
+
+    match /contests/{year} {
+      match /votes/{voteId} {
+        allow read: if signedIn();
+        allow create, update: if signedIn() && mine(voteId)
+          && request.resource.data.judgeId == request.auth.uid
+          && request.resource.data.category in ['wonderful', 'anything', 'tree', 'doors']
+          && star(request.resource.data.curbAppeal)
+          && star(request.resource.data.overallPresentation)
+          && (request.resource.data.uniqueDesign == null || star(request.resource.data.uniqueDesign))
+          && request.resource.data.notes.size() <= 2000;
+        allow delete: if signedIn() && mine(voteId);
+      }
+      match /photos/{voteId} {
+        allow read: if signedIn();
+        allow create, update: if signedIn() && mine(voteId) && request.resource.data.data.size() < 500000;
+        allow delete: if signedIn() && mine(voteId);
+      }
+      match /sessions/{code} {
+        allow read: if signedIn();
+        allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+        allow update: if signedIn() && resource.data.hostUid == request.auth.uid
+          && request.resource.data.hostUid == resource.data.hostUid;
+        match /judges/{uid} {
+          allow read: if signedIn();
+          allow write: if signedIn() && uid == request.auth.uid;
+        }
+      }
+    }
+  }
+}

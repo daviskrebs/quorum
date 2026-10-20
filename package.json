@@ -1,0 +1,12 @@
+{
+  "name": "light-up-the-hood",
+  "private": true,
+  "scripts": {
+    "build:addresses": "node scripts/build-addresses.mjs",
+    "build:firebase": "node scripts/build-firebase.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "firebase": "^11.10.0"
+  }
+}

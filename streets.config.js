@@ -2,6 +2,8 @@
 // range: optional [min, max] filter for long streets that run past Bellevue.
 // House numbers themselves come from addresses.js (real address points).
 var LUTH_CONFIG = {
+  // Contest year. Synced votes are stored per year so seasons never mix.
+  YEAR: 2026,
   // Search box for address points: [west, south, east, north] in lon/lat.
   BBOX: [-77.472, 37.578, -77.438, 37.605],
   STREETS: [

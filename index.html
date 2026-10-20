@@ -160,6 +160,20 @@
   .host-panel .row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:14px;border-bottom:1px solid #F4F0E4}
   .host-panel .row:last-child{border-bottom:none}
   .st-done{color:var(--green);font-weight:700}.st-skip{color:#999}.st-wait{color:var(--gold)}
+  /* Photo viewer */
+  .viewer{position:fixed;inset:0;background:#0b0b0b;z-index:70;display:none;flex-direction:column;padding:calc(10px + var(--safe-top)) 12px calc(12px + var(--safe-bot))}
+  .viewer.open{display:flex}
+  .viewer-top{display:flex;align-items:center;gap:10px;color:#fff;margin-bottom:8px}
+  .viewer-cap{flex:1;min-width:0;font-size:14px}
+  .viewer-cap b{display:block;font-size:16px}
+  .viewer-close{background:rgba(255,255,255,.15);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;flex-shrink:0}
+  .viewer-stage{flex:1;display:flex;align-items:center;justify-content:center;min-height:0}
+  .viewer-stage img{max-width:100%;max-height:100%;object-fit:contain;border-radius:6px}
+  .viewer-bar{display:flex;gap:8px;align-items:center;margin-top:10px}
+  .viewer-bar .btn{margin-top:0}
+  .viewer-nav{background:rgba(255,255,255,.15);color:#fff;border:none;border-radius:12px;width:52px;padding:14px 0;font-size:20px;cursor:pointer}
+  .viewer-count{color:rgba(255,255,255,.7);font-size:13px;min-width:44px;text-align:center}
+  img.thumb[data-view-house],#photo-img{cursor:zoom-in}
   .toast{position:fixed;left:50%;top:calc(14px + var(--safe-top));transform:translateX(-50%) translateY(-20px);background:var(--green);color:#fff;padding:10px 18px;border-radius:20px;font-size:14px;opacity:0;transition:all .25s;z-index:60;pointer-events:none;white-space:nowrap}
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 </style>
@@ -228,7 +242,7 @@
 
   <!-- EXPORT -->
   <section id="screen-export" class="screen">
-    <header class="header"><h1>Export</h1><div class="sub">Judge <span id="judge-id-display"></span></div></header>
+    <header class="header"><h1>Export</h1><div class="sub" id="judge-id-display"></div></header>
     <div class="pad">
       <div class="card">
         <div class="card-title">Export votes</div>
@@ -238,11 +252,19 @@
           <div class="stat-card"><div class="stat-num" id="export-houses">0</div><div class="stat-label">Addresses</div></div>
         </div>
         <button class="btn btn-primary" data-action="export">Download CSV</button>
+      </div>
+      <div class="card">
+        <div class="card-title">Photos</div>
+        <p class="muted" style="margin-bottom:12px" id="photos-desc">Downloads a .zip of photos, named by category, place, and address.</p>
+        <button class="btn btn-gold" data-action="zip-winners">Download winners' photos</button>
+        <button class="btn btn-secondary" data-action="zip-all">Download all photos</button>
+      </div>
+      <div class="card" id="danger-card">
         <button class="btn btn-danger" data-action="clear-all" id="clear-all-btn">Clear all data on this device</button>
       </div>
       <div class="card">
         <div class="card-title">Address data</div>
-        <p class="muted" id="data-source"></p>
+        <p class="muted" id="data-source" style="overflow-wrap:anywhere"></p>
       </div>
     </div>
   </section>
@@ -309,6 +331,18 @@
   </div>
 </div>
 
+<div class="viewer" id="viewer" role="dialog" aria-modal="true">
+  <div class="viewer-top"><div class="viewer-cap" id="viewer-cap"></div>
+    <button class="viewer-close" data-action="close-viewer" aria-label="Close">&#215;</button></div>
+  <div class="viewer-stage"><img id="viewer-img" alt=""></div>
+  <div class="viewer-bar">
+    <button class="viewer-nav" data-action="viewer-prev" id="viewer-prev" aria-label="Previous">&#8249;</button>
+    <span class="viewer-count" id="viewer-count"></span>
+    <button class="btn btn-gold" data-action="viewer-save" style="flex:1">Save photo</button>
+    <button class="viewer-nav" data-action="viewer-next" id="viewer-next" aria-label="Next">&#8250;</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="streets.config.js"></script>
@@ -353,8 +387,9 @@ function deleteVote(address){
 function myVote(address){return getVotes().find(v=>v.address===address&&v.judgeId===judgeId);}
 // Photo markup; cloud photos load after render (see fillPhotos).
 function thumb(v){
-  if(v&&v.photo)return `<img class="thumb" src="${v.photo}" alt="">`;
-  if(v&&v.hasPhoto&&CLOUD)return `<img class="thumb" data-photo-id="${esc(v.id)}" alt="">`;
+  const view=v?` data-view-house="${esc(v.address)}"`:'';
+  if(v&&v.photo)return `<img class="thumb" src="${v.photo}"${view} alt="">`;
+  if(v&&v.hasPhoto&&CLOUD)return `<img class="thumb" data-photo-id="${esc(v.id)}"${view} alt="">`;
   return '<div class="thumb">&#127968;</div>';
 }
 function fillPhotos(root){
@@ -519,13 +554,25 @@ function setPhoto(src){
   $('photo-preview').style.display=src?'':'none';$('photo-zone').style.display=src?'none':'';
   if(src)$('photo-img').src=src;else $('photo-input').value='';
 }
+// Synced photos are kept large enough to print or post (1600px, under Firestore's 1 MB
+// document limit). Phone-only mode stays small to fit in browser storage.
+function shrinkPhoto(img){
+  const LIMIT=900000;let max=CLOUD?1600:600,q=CLOUD?0.82:0.7,out;
+  for(let tries=0;tries<8;tries++){
+    const scale=Math.min(1,max/Math.max(img.width,img.height));
+    const cv=document.createElement('canvas');cv.width=Math.round(img.width*scale);cv.height=Math.round(img.height*scale);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    out=cv.toDataURL('image/jpeg',q);
+    if(!CLOUD||out.length<=LIMIT)break;
+    if(q>0.6)q-=0.1;else max=Math.round(max*0.85);
+  }
+  return out;
+}
 function handlePhoto(file){
   if(!file)return;
   const img=new Image();
   img.onload=()=>{
-    const MAX=600;let w=img.width,h=img.height;if(w>MAX){h=Math.round(h*MAX/w);w=MAX;}
-    const cv=document.createElement('canvas');cv.width=w;cv.height=h;cv.getContext('2d').drawImage(img,0,0,w,h);
-    URL.revokeObjectURL(img.src);setPhoto(cv.toDataURL('image/jpeg',0.7));sheet.dirty=true;
+    URL.revokeObjectURL(img.src);setPhoto(shrinkPhoto(img));sheet.dirty=true;
   };
   img.src=URL.createObjectURL(file);
 }
@@ -594,17 +641,24 @@ function renderMyVotes(){
     :'<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127968;</div>No votes yet. Pick a street to start.</div>';
   if(CLOUD)fillPhotos($('my-votes-list'));
 }
-function renderResults(){
+// Houses per category, best average first.
+function rankings(){
   const groups={};
   getVotes().forEach(v=>{
     const g=groups[v.category]=groups[v.category]||{};
     const h=g[v.address]=g[v.address]||{address:v.address,totals:[],photoVote:null};
     h.totals.push(v.total);if((v.photo||v.hasPhoto)&&!h.photoVote)h.photoVote=v;
   });
+  const out={};
+  for(const k in groups)out[k]=Object.values(groups[k]).map(h=>({...h,avg:Math.round(h.totals.reduce((a,b)=>a+b,0)/h.totals.length*10)/10})).sort((a,b)=>b.avg-a.avg);
+  return out;
+}
+function renderResults(){
+  const groups=rankings();
   const el=$('results-content');
   if(!Object.keys(groups).length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127942;</div>No votes yet.</div>';return;}
   el.innerHTML=CATS_LIST.filter(c=>groups[c.key]).map(c=>{
-    const ranked=Object.values(groups[c.key]).map(h=>({...h,avg:Math.round(h.totals.reduce((a,b)=>a+b,0)/h.totals.length*10)/10})).sort((a,b)=>b.avg-a.avg);
+    const ranked=groups[c.key];
     return `<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0">${esc(c.label)}</div>
       ${ranked.map((h,i)=>`<div class="vote-item" style="cursor:default">
         ${thumb(h.photoVote)}
@@ -798,6 +852,75 @@ function leaveSession(){
   Cloud.leaveSession();
 }
 
+// ---------- Photo viewer ----------
+// Every photo any judge took of a house, as {vote, caption}.
+function photosOf(address){
+  return getVotes().filter(v=>v.address===address&&(v.photo||v.hasPhoto))
+    .map(v=>({vote:v,caption:v.judgeName||'Judge'}));
+}
+async function photoData(v){return v.photo||(CLOUD&&v.hasPhoto?await Cloud.photo(v.id):null);}
+let viewer={items:[],i:0,title:''};
+function openViewer(items,i,title){viewer={items,i,title};$('viewer').classList.add('open');showViewerItem();}
+async function showViewerItem(){
+  const {items,i,title}=viewer,it=items[i];if(!it)return;
+  $('viewer-cap').innerHTML=`<b>${esc(title)}</b>${esc(it.caption||'')}`;
+  $('viewer-count').textContent=items.length>1?`${i+1} / ${items.length}`:'';
+  $('viewer-prev').style.visibility=$('viewer-next').style.visibility=items.length>1?'visible':'hidden';
+  const img=$('viewer-img');img.removeAttribute('src');
+  const src=it.src||await photoData(it.vote);
+  if(viewer.items[viewer.i]===it&&src)img.src=src;
+}
+function stepViewer(d){const n=viewer.items.length;if(n<2)return;viewer.i=(viewer.i+d+n)%n;showViewerItem();}
+function closeViewer(){$('viewer').classList.remove('open');}
+const fileSafe=s=>String(s).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+function downloadBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),10000);}
+function dataUrlBytes(d){const b=atob(d.split(',')[1]);const u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u;}
+async function saveViewerPhoto(){
+  const it=viewer.items[viewer.i];if(!it)return;
+  const src=it.src||await photoData(it.vote);if(!src)return;
+  downloadBlob(new Blob([dataUrlBytes(src)],{type:'image/jpeg'}),fileSafe(viewer.title+' '+(it.caption||''))+'.jpg');
+}
+
+// ---------- Photo zips ----------
+// Minimal .zip writer (stored, no compression: JPEGs don't shrink further).
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(u){let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=CRC_T[(c^u[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function makeZip(files){
+  const enc=new TextEncoder(),parts=[],central=[];let offset=0;
+  for(const f of files){
+    const name=enc.encode(f.name),crc=crc32(f.data),size=f.data.length;
+    const h=new DataView(new ArrayBuffer(30));
+    [[0,0x04034b50,4],[4,20,2],[8,0,2],[14,crc,4],[18,size,4],[22,size,4],[26,name.length,2]].forEach(([o,v,n])=>n===4?h.setUint32(o,v,true):h.setUint16(o,v,true));
+    parts.push(new Uint8Array(h.buffer),name,f.data);
+    const c=new DataView(new ArrayBuffer(46));
+    [[0,0x02014b50,4],[4,20,2],[6,20,2],[16,crc,4],[20,size,4],[24,size,4],[28,name.length,2],[42,offset,4]].forEach(([o,v,n])=>n===4?c.setUint32(o,v,true):c.setUint16(o,v,true));
+    central.push(new Uint8Array(c.buffer),name);
+    offset+=30+name.length+size;
+  }
+  const csize=central.reduce((a,p)=>a+p.length,0),e=new DataView(new ArrayBuffer(22));
+  [[0,0x06054b50,4],[8,files.length,2],[10,files.length,2],[12,csize,4],[16,offset,4]].forEach(([o,v,n])=>n===4?e.setUint32(o,v,true):e.setUint16(o,v,true));
+  return new Blob([...parts,...central,new Uint8Array(e.buffer)],{type:'application/zip'});
+}
+async function zipPhotos(winnersOnly){
+  // Each entry: {vote, name}. Winners = top 3 per category, every judge's photo of each.
+  const list=[],ranks=rankings(),medal=['1st','2nd','3rd'];
+  for(const c of CATS_LIST){
+    (ranks[c.key]||[]).forEach((h,i)=>{
+      if(winnersOnly&&i>2)return;
+      photosOf(h.address).forEach(p=>{
+        const base=`${fileSafe(c.label)}/${winnersOnly?medal[i]+'-':String(i+1).padStart(3,'0')+'-'}${fileSafe(h.address)}-${fileSafe(p.caption)}`;
+        let name=base+'.jpg',n=2;while(list.some(x=>x.name===name))name=`${base}-${n++}.jpg`;
+        list.push({vote:p.vote,name});
+      });
+    });
+  }
+  if(!list.length){toast(winnersOnly?'No photos of the top houses yet':'No photos yet');return;}
+  toast(`Preparing ${list.length} photo${list.length>1?'s':''}...`);
+  const files=[];
+  for(const it of list){const d=await photoData(it.vote).catch(()=>null);if(d)files.push({name:it.name,data:dataUrlBytes(d)});}
+  downloadBlob(makeZip(files),`light-up-the-hood-${LUTH_CONFIG.YEAR}-${winnersOnly?'winners':'all'}-photos.zip`);
+}
+
 // ---------- Navigation ----------
 let activeTab='streets';
 function showScreen(name){
@@ -811,6 +934,9 @@ let toastTimer;
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2200);}
 
 document.addEventListener('click',e=>{
+  const vh=e.target.closest('[data-view-house]');
+  if(vh){e.stopPropagation();const items=photosOf(vh.dataset.viewHouse);if(items.length)openViewer(items,0,vh.dataset.viewHouse);return;}
+  if(e.target.id==='photo-img'&&sheet.photo){openViewer([{src:sheet.photo,caption:'Your photo'}],0,addrOf(sheet.num,sheet.street));return;}
   const t=e.target.closest('[data-make-host],[data-remove-judge],[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
   if(!t)return;
   if(t.dataset.tab){showScreen(t.dataset.tab);window.scrollTo(0,0);return;}
@@ -833,13 +959,20 @@ document.addEventListener('click',e=>{
     'call-house':()=>{if(!Cloud.session.current&&sheet.cat)Cloud.callHouse(sheet.street,sheet.num,sheet.cat);},
     'close-voting':closeVoting,
     'pick-host':()=>{pickingHost=true;renderSessionCard();},'cancel-pick-host':()=>{pickingHost=false;renderSessionCard();},
-    'claim-host':claimHost,'go-call':goToCall,
+    'claim-host':claimHost,
+    'close-viewer':closeViewer,'viewer-prev':()=>stepViewer(-1),'viewer-next':()=>stepViewer(1),'viewer-save':saveViewerPhoto,
+    'zip-winners':()=>zipPhotos(true),'zip-all':()=>zipPhotos(false),'go-call':goToCall,
   })[t.dataset.action]?.();
 });
 $('photo-input').addEventListener('change',e=>handlePhoto(e.target.files[0]));
 $('add-house-input').addEventListener('keydown',e=>{if(e.key==='Enter')addHouse();});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeSheet();});
+document.addEventListener('keydown',e=>{
+  if($('viewer').classList.contains('open')){if(e.key==='Escape')closeViewer();if(e.key==='ArrowLeft')stepViewer(-1);if(e.key==='ArrowRight')stepViewer(1);return;}
+  if(e.key==='Escape')closeSheet();});
 $('notes-input').addEventListener('input',()=>{sheet.dirty=true;});
+let swipeX=null;
+$('viewer').addEventListener('touchstart',e=>{swipeX=e.touches[0].clientX;},{passive:true});
+$('viewer').addEventListener('touchend',e=>{if(swipeX==null)return;const dx=e.changedTouches[0].clientX-swipeX;swipeX=null;if(Math.abs(dx)>50)stepViewer(dx<0?1:-1);});
 
 // ---------- Boot ----------
 function showIdentity(){
@@ -851,7 +984,7 @@ showIdentity();
 if(CLOUD){
   $('results-sub').textContent='Live from every judge';
   $('export-desc').textContent='Download a CSV of every judge\'s votes this year. Votes already sync live, so this is a backup.';
-  $('clear-all-btn').style.display='none';
+  $('danger-card').style.display='none';
   Cloud.onChange(kind=>{
     if(kind==='error')toast('Sync problem. Votes are saved and will retry.');
     if(kind==='session-missing')toast('That session has ended');

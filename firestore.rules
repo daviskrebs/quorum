@@ -22,7 +22,7 @@ service cloud.firestore {
       }
       match /photos/{voteId} {
         allow read: if signedIn();
-        allow create, update: if signedIn() && mine(voteId) && request.resource.data.data.size() < 500000;
+        allow create, update: if signedIn() && mine(voteId) && request.resource.data.data.size() < 1000000;
         allow delete: if signedIn() && mine(voteId);
       }
       match /sessions/{code} {

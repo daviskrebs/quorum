@@ -322,7 +322,7 @@
       </div>
     </div>
   </div>
-  <div class="sheet-actions">
+  <div class="sheet-actions" id="sheet-actions">
     <button class="btn btn-primary" data-action="save-next">Save vote</button>
     <div class="btn-row">
       <button class="btn btn-ghost" data-action="skip-house">No display &middot; skip</button>
@@ -351,7 +351,7 @@
 try{
   const v=String(LUTH_CONFIG.PHONE_DATA_VERSION||1);
   if(localStorage.getItem('luth_phone_data_version')!==v){
-    ['luth_votes','luth_skips','luth_extra_houses','luth_session'].forEach(k=>localStorage.removeItem(k));
+    ['luth_votes','luth_skips','luth_extra_houses','luth_session','luth_last_session_obj'].forEach(k=>localStorage.removeItem(k));
     localStorage.setItem('luth_phone_data_version',v);
   }
 }catch(e){}
@@ -545,18 +545,31 @@ function openSheet(num,presetCat){
   $('sheet').classList.add('open');$('sheet-backdrop').classList.add('open');
 }
 function closeSheet(){sheet.open=false;$('sheet').classList.remove('open');$('sheet-backdrop').classList.remove('open');renderCallbar();}
+// An official vote is locked once its house's voting closes.
+function voteLocked(){
+  if(!CLOUD||!sheet.open)return false;
+  const v=myVote(addrOf(sheet.num,sheet.street));
+  if(!v||!v.callId)return false;
+  const c=Cloud.session&&Cloud.session.current;
+  return !(c&&c.callId===v.callId&&Cloud.sessionCode===v.sessionCode);
+}
 // In a session, the host picks the category when opening voting; everyone's sheet locks to it.
 function lockedCat(){const c=calledHere();return c&&c.cat?c.cat:null;}
 function renderSheet(){
-  const lock=lockedCat();
+  const ro=voteLocked();
+  $('sheet-actions').style.display=ro?'none':'';
+  $('photo-zone').style.pointerEvents=ro?'none':'';
+  $('notes-input').readOnly=ro;
+  if(ro)$('sheet-status').textContent='Voting on this house has closed. Your vote is locked and counts.';
+  const lock=ro?sheet.cat:lockedCat();
   if(lock&&sheet.cat!==lock){sheet.cat=lock;if(lock!=='anything')sheet.scores.unique=0;}
   $('cat-chips').innerHTML=lock
-    ?`<button class="chip on" disabled>${esc(CATS[lock])}</button><span class="muted" style="align-self:center;font-size:12px">Set by the host</span>`
+    ?`<button class="chip on" disabled>${esc(CATS[lock])}</button><span class="muted" style="align-self:center;font-size:12px">${ro?'Locked':'Set by the host'}</span>`
     :CATS_LIST.map(c=>`<button class="chip${sheet.cat===c.key?' on':''}" data-cat="${c.key}">${esc(c.label)}</button>`).join('');
   $('unique-group').style.display=sheet.cat==='anything'?'':'none';
   document.querySelectorAll('#sheet .stars').forEach(el=>{
     const k=el.dataset.key;
-    el.innerHTML=[1,2,3,4,5].map(i=>`<button class="star${sheet.scores[k]>=i?' on':''}" data-star="${i}" aria-label="${i} star">&#9733;</button>`).join('');
+    el.innerHTML=[1,2,3,4,5].map(i=>`<button class="star${sheet.scores[k]>=i?' on':''}" data-star="${i}"${ro?' disabled':''} aria-label="${i} star">&#9733;</button>`).join('');
   });
 }
 function setPhoto(src){
@@ -618,6 +631,9 @@ function saveVote(){
   const vote={judgeId,judgeName:store.get('luth_judge_name','')||null,timestamp:new Date().toISOString(),address:a,street:currentStreet,houseNum:String(sheet.num),
     category:cat,categoryName:CATS[cat],curbAppeal:s.curb,overallPresentation:s.overall,
     uniqueDesign:cat==='anything'?s.unique:null,notes:$('notes-input').value.trim(),total};
+  // Official only when the host has this house open; tagged so the rules and standings can check it.
+  const called=calledHere();
+  vote.sessionCode=called?Cloud.sessionCode:null;vote.callId=called?called.callId:null;
   if(!writeVote(vote,sheet.photo))return;
   const skips=getSkips();if(skips[a]){delete skips[a];store.set('luth_skips',skips);}
   afterVote('Saved '+a);
@@ -652,9 +668,13 @@ function renderMyVotes(){
   if(CLOUD)fillPhotos($('my-votes-list'));
 }
 // Houses per category, best average first.
-function rankings(){
+// Official = cast on a house the host opened in a group. Phone-only mode has no groups, so every vote counts.
+const isOfficial=v=>!CLOUD||!!v.callId;
+const MIN_JUDGES=LUTH_CONFIG.MIN_JUDGES||3;
+// Houses per category, best average first. Official votes only unless includeAll.
+function rankings(includeAll){
   const groups={};
-  getVotes().forEach(v=>{
+  getVotes().filter(v=>includeAll||isOfficial(v)).forEach(v=>{
     const g=groups[v.category]=groups[v.category]||{};
     const h=g[v.address]=g[v.address]||{address:v.address,totals:[],photoVote:null};
     h.totals.push(v.total);if((v.photo||v.hasPhoto)&&!h.photoVote)h.photoVote=v;
@@ -663,11 +683,27 @@ function rankings(){
   for(const k in groups)out[k]=Object.values(groups[k]).map(h=>({...h,avg:Math.round(h.totals.reduce((a,b)=>a+b,0)/h.totals.length*10)/10})).sort((a,b)=>b.avg-a.avg);
   return out;
 }
+// Houses that qualify to place: official votes from at least MIN_JUDGES judges (phone-only: any).
+function placings(){
+  const all=rankings(),out={};
+  for(const k in all){const q=all[k].filter(h=>!CLOUD||h.totals.length>=MIN_JUDGES);if(q.length)out[k]=q;}
+  return out;
+}
 function renderResults(){
-  const groups=rankings();
+  const groups=placings(),all=rankings();
   const el=$('results-content');
-  if(!Object.keys(groups).length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127942;</div>No votes yet.</div>';return;}
-  el.innerHTML=CATS_LIST.filter(c=>groups[c.key]).map(c=>{
+  const short=CLOUD?Object.entries(all).flatMap(([k,hs])=>hs.filter(h=>h.totals.length<MIN_JUDGES).map(h=>({...h,cat:k}))):[];
+  const unofficial=CLOUD?getVotes().filter(v=>!isOfficial(v)):[];
+  if(!Object.keys(groups).length&&!short.length&&!unofficial.length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127942;</div>No votes yet.</div>';return;}
+  const rule=CLOUD?`<p class="muted" style="margin:0 4px 12px;font-size:12px">Only votes cast in a judging group on a house the host opened count. A house places once ${MIN_JUDGES} judges have scored it.</p>`:'';
+  const audit=CLOUD&&(short.length||unofficial.length)?`<div class="section-label">Not counted</div>
+    ${short.length?`<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0;font-size:14px">Needs ${MIN_JUDGES} judges</div>
+      ${short.map(h=>`<div class="vote-item" style="cursor:default">${thumb(h.photoVote)}<div style="flex:1"><div class="vote-addr">${esc(h.address)}</div>
+        <div class="muted" style="font-size:11px">${esc(CATS[h.cat])} &middot; ${h.totals.length} of ${MIN_JUDGES} judges</div></div><div class="vote-score" style="color:#aaa">${h.avg}</div></div>`).join('')}</div>`:''}
+    ${unofficial.length?`<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0;font-size:14px">Outside a judging group</div>
+      ${unofficial.sort((a,b)=>a.address.localeCompare(b.address)).map(v=>`<div class="vote-item" style="cursor:default">${thumb(v)}<div style="flex:1"><div class="vote-addr">${esc(v.address)}</div>
+        <div class="muted" style="font-size:11px">${[v.judgeName||'Judge',CATS[v.category],v.timestamp&&!isNaN(new Date(v.timestamp))?new Date(v.timestamp).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''].filter(Boolean).map(esc).join(' &middot; ')}</div></div><div class="vote-score" style="color:#aaa">${v.total}</div></div>`).join('')}</div>`:''}`:'';
+  el.innerHTML=rule+(Object.keys(groups).length?'':`<div class="empty-state" style="padding:16px">No house has ${MIN_JUDGES} judges yet.</div>`)+CATS_LIST.filter(c=>groups[c.key]).map(c=>{
     const ranked=groups[c.key];
     return `<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0">${esc(c.label)}</div>
       ${ranked.map((h,i)=>`<div class="vote-item" style="cursor:default">
@@ -675,7 +711,7 @@ function renderResults(){
         <div style="flex:1"><div class="vote-addr">${['&#129351; ','&#129352; ','&#129353; '][i]||''}${esc(h.address)}</div>
         <div class="muted" style="font-size:11px">${h.totals.length} vote${h.totals.length!==1?'s':''}</div></div>
         <div class="vote-score">${h.avg}</div></div>`).join('')}</div>`;
-  }).join('');
+  }).join('')+audit;
   if(CLOUD)fillPhotos(el);
 }
 function renderExport(){
@@ -690,9 +726,9 @@ function renderExport(){
 }
 function exportCSV(){
   const votes=getVotes();if(!votes.length){toast('No votes to export');return;}
-  const headers=['judgeId','judgeName','timestamp','address','street','houseNum','category','categoryName','curbAppeal','overallPresentation','uniqueDesign','total','notes','hasPhoto'];
+  const headers=['judgeId','judgeName','timestamp','address','street','houseNum','category','categoryName','curbAppeal','overallPresentation','uniqueDesign','total','notes','hasPhoto','official','sessionCode','callId'];
   const cell=v=>{v=String(v??'');return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
-  const rows=votes.map(v=>headers.map(h=>cell(h==='hasPhoto'?(v.photo||v.hasPhoto?'yes':'no'):v[h])).join(','));
+  const rows=votes.map(v=>headers.map(h=>cell(h==='hasPhoto'?(v.photo||v.hasPhoto?'yes':'no'):h==='official'?(isOfficial(v)?'yes':'no'):v[h])).join(','));
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([[headers.join(','),...rows].join('\n')],{type:'text/csv'}));
   a.download=`luth_votes_${CLOUD?'all_judges':judgeId}_${new Date().toISOString().slice(0,10)}.csv`;a.click();
@@ -709,10 +745,20 @@ function renderSessionCard(){
   if(!CLOUD){el.innerHTML='';return;}
   const off=Cloud.online?'':'<span class="offline">Offline · will sync</span>';
   if(!Cloud.sessionCode){
-    el.innerHTML=`<div class="card"><div class="card-title">Judging as a group?${off}</div>
-      <p class="muted" style="margin-bottom:4px">The host opens voting on each house and sees who has voted. Votes sync to everyone either way.</p>
-      <div class="btn-row"><button class="btn btn-primary" data-action="start-session">Start session</button>
-      <button class="btn btn-secondary" data-action="join-session">Join with code</button></div></div>`;
+    refreshGroups();
+    const last=store.get('luth_last_session_obj',null);
+    const groups=activeGroups||[];
+    const rejoin=last&&groups.find(g=>g.code===last.code);
+    const others=groups.filter(g=>g!==rejoin);
+    const row=g=>`<div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #F4F0E4">
+        <span><b>${esc(g.hostName)}'s group</b><br><span class="muted" style="font-size:12px">${g.judges} judge${g.judges!==1?'s':''} &middot; code ${esc(g.code)}</span></span>
+        <button class="btn btn-secondary btn-sm" data-join-group="${esc(g.code)}">Join</button></div>`;
+    el.innerHTML=`<div class="card"><div class="card-title">Judging groups${off}</div>
+      ${rejoin?`<button class="btn btn-primary" style="margin:0 0 10px" data-join-group="${esc(rejoin.code)}">Rejoin ${esc(rejoin.hostName)}'s group</button>`:''}
+      ${others.length?`<div class="muted" style="font-size:12px">Judging now:</div>${others.map(row).join('')}`
+        :!rejoin?`<p class="muted">${activeGroups?'No groups are judging right now.':'Looking for groups...'} Only votes cast in a group count.</p>`:''}
+      <div class="btn-row" style="margin-top:6px"><button class="btn ${groups.length?'btn-ghost':'btn-primary'}" data-action="start-session">Start a new group</button>
+      <button class="btn btn-ghost" data-action="join-session">Join with code</button></div></div>`;
     return;
   }
   const s=Cloud.session;
@@ -730,14 +776,32 @@ function renderSessionCard(){
     const rm=host&&!isH?` <button class="pill-x" data-remove-judge="${esc(j.uid)}" aria-label="Remove ${esc(j.name)}">&#215;</button>`:'';
     return `<span class="judge-pill${isH?' host':''}">${esc(j.name)}${isH?' · host':''}${rm}</span>`;}).join('');
   el.innerHTML=`<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-      <div><div class="muted">Session code${off}</div><div class="session-code">${esc(Cloud.sessionCode)}</div></div>
+      <div><div class="muted">Group code${off}</div><div class="session-code">${esc(Cloud.sessionCode)}</div></div>
       <div class="muted" style="text-align:right">${host?'You are the host':s?'Host: '+esc(s.hostName):'Connecting...'}</div></div>
     <div class="judge-pills">${pills}</div>
     ${host?'<p class="muted" style="margin:6px 0 0">Open a street and tap a house, then tap <b>Open voting</b>. Tap &#215; to remove a judge who left.</p>':''}
     <div class="btn-row"><button class="btn btn-secondary" data-action="invite">Invite judges</button>
     <button class="btn btn-ghost" data-action="leave-session">Leave</button></div>
     ${s?(host?'<button class="btn btn-ghost" data-action="pick-host">Hand off hosting</button>'
-      :'<button class="btn btn-ghost" data-action="claim-host">Take over hosting</button>'):''}</div>`;
+      :'<button class="btn btn-ghost" data-action="claim-host">Take over hosting</button>'):''}
+    ${host?'<button class="btn btn-danger" data-action="end-session">End judging group</button>':''}</div>`;
+}
+// Active groups, refreshed at most every 15 seconds while this phone isn't in one.
+let activeGroups=null,groupsFetchedAt=0,groupsLoading=false;
+function refreshGroups(force){
+  if(!CLOUD||!Cloud.uid||Cloud.sessionCode||groupsLoading)return;
+  if(!force&&Date.now()-groupsFetchedAt<15000)return;
+  groupsLoading=true;groupsFetchedAt=Date.now();
+  Cloud.listActiveSessions().then(g=>{activeGroups=g;}).catch(()=>{activeGroups=activeGroups||[];})
+    .finally(()=>{groupsLoading=false;renderSessionCard();});
+}
+setInterval(()=>{if(document.visibilityState==='visible')refreshGroups();},20000);
+async function endSession(){
+  const c=Cloud.session&&Cloud.session.current;
+  const msg='End this judging group for everyone?\n\n'+(c?`Voting on ${addrOf(c.num,c.street)} is still open and will close. `:'')
+    +'All judges leave the group and it cannot be reopened. Votes already cast are kept.';
+  if(!confirm(msg))return;
+  try{await Cloud.endSession();}catch(e){toast('Could not end the group. Try again.');}
 }
 let pickingHost=false;
 async function makeHost(uid){
@@ -750,7 +814,7 @@ async function makeHost(uid){
 }
 async function claimHost(){
   const s=Cloud.session;if(!s)return;
-  if(!confirm(`Take over hosting from ${s.hostName}? Do this if they can't run the session. You'll open and close voting for everyone.`))return;
+  if(!confirm(`Take over hosting from ${s.hostName}? Do this if they can't run the group. You'll open and close voting for everyone.`))return;
   const name=judgeName();if(!name)return;
   try{await Cloud.claimHost(name);}catch(e){toast('Could not take over. Try again.');}
 }
@@ -824,7 +888,7 @@ function onSessionUpdate(){
   if(openCall&&(!c||c.callId!==openCall.callId)&&!Cloud.isHost()){
     const was=openCall;openCall=null;
     if(sheet.open&&sheet.street===was.street&&sheet.num===was.num){
-      if(sheet.dirty)toast('Host closed voting. You can still save.');
+      if(sheet.dirty)toast("Host closed voting before you saved. This vote won't count.");
       else if(!c){closeSheet();toast('Host closed voting');}
     }
   }
@@ -839,9 +903,11 @@ function onSessionUpdate(){
   if(navigator.vibrate)navigator.vibrate(150);
 }
 async function startSession(){
+  const n=(activeGroups||[]).length;
+  if(n&&!confirm(`${n===1?activeGroups[0].hostName+"'s group is":n+' groups are'} already judging. Start a separate group anyway?\n\nTo rejoin a group, tap Join instead.`))return;
   const name=judgeName();if(!name)return;
   showIdentity();
-  try{const code=await Cloud.createSession(name);toast('Session '+code+' started');}
+  try{const code=await Cloud.createSession(name);rememberGroup();toast('Group '+code+' started');}
   catch(e){toast(e.message);}
 }
 async function joinSession(code){
@@ -849,7 +915,7 @@ async function joinSession(code){
   const name=judgeName();if(!name)return;
   showIdentity();
   lastCallId=null;openCall=null;lastHostUid=null; // a (re)joining judge should land on any open house
-  try{await Cloud.joinSession(code,name);toast('Joined session '+code.toUpperCase());}
+  try{await Cloud.joinSession(code,name);rememberGroup();toast('Joined group '+code.toUpperCase());}
   catch(e){toast(e.message);}
 }
 function invite(){
@@ -857,9 +923,16 @@ function invite(){
   if(navigator.share)navigator.share({title:'Judge Light Up the Hood',text:'Join judging session '+Cloud.sessionCode,url}).catch(()=>{});
   else navigator.clipboard.writeText(url).then(()=>toast('Invite link copied'),()=>prompt('Copy this link',url));
 }
+// Remember the group so a judge who leaves by mistake gets a one-tap Rejoin.
+function rememberGroup(){
+  setTimeout(()=>{if(Cloud.sessionCode)store.set('luth_last_session_obj',{code:Cloud.sessionCode,hostName:(Cloud.session&&Cloud.session.hostName)||''});},1500);
+}
 function leaveSession(){
-  if(Cloud.isHost()&&!confirm('Leave this session? Any open house closes, and judges stop getting houses from you. You can rejoin with the code and stay host.'))return;
-  Cloud.leaveSession();
+  const msg=Cloud.isHost()
+    ?'Leave this group? Any open house closes, and judges stop getting houses from you. You can rejoin and stay host.\n\nTo finish judging for everyone, use End judging group instead.'
+    :'Leave this judging group? You will stop getting houses from the host. You can rejoin from the Streets screen.';
+  if(!confirm(msg))return;
+  Cloud.leaveSession();activeGroups=null;refreshGroups(true);
 }
 
 // ---------- Photo viewer ----------
@@ -913,7 +986,8 @@ function makeZip(files){
 }
 async function zipPhotos(winnersOnly){
   // Each entry: {vote, name}. Winners = top 3 per category, every judge's photo of each.
-  const list=[],ranks=rankings(),medal=['1st','2nd','3rd'];
+  // Winners: houses that placed. All photos: every house, counted or not.
+  const list=[],ranks=winnersOnly?placings():rankings(true),medal=['1st','2nd','3rd'];
   for(const c of CATS_LIST){
     (ranks[c.key]||[]).forEach((h,i)=>{
       if(winnersOnly&&i>2)return;
@@ -947,17 +1021,18 @@ document.addEventListener('click',e=>{
   const vh=e.target.closest('[data-view-house]');
   if(vh){e.stopPropagation();const items=photosOf(vh.dataset.viewHouse);if(items.length)openViewer(items,0,vh.dataset.viewHouse);return;}
   if(e.target.id==='photo-img'&&sheet.photo){openViewer([{src:sheet.photo,caption:'Your photo'}],0,addrOf(sheet.num,sheet.street));return;}
-  const t=e.target.closest('[data-make-host],[data-remove-judge],[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
+  const t=e.target.closest('[data-join-group],[data-make-host],[data-remove-judge],[data-action],[data-tab],[data-street],[data-house],[data-cat],[data-star],[data-edit-street]');
   if(!t)return;
   if(t.dataset.tab){showScreen(t.dataset.tab);window.scrollTo(0,0);return;}
   if(t.dataset.street){openStreet(t.dataset.street);return;}
   if(t.dataset.house){openSheet(t.dataset.house);return;}
   if(t.dataset.cat){if(lockedCat())return;sheet.cat=t.dataset.cat;sheet.dirty=true;if(sheet.cat!=='anything')sheet.scores.unique=0;renderSheet();renderHostPanel();return;}
-  if(t.dataset.star){sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;sheet.dirty=true;renderSheet();return;}
+  if(t.dataset.star){if(voteLocked())return;sheet.scores[t.closest('.stars').dataset.key]=+t.dataset.star;sheet.dirty=true;renderSheet();return;}
+  if(t.dataset.joinGroup){joinSession(t.dataset.joinGroup);return;}
   if(t.dataset.makeHost){makeHost(t.dataset.makeHost);return;}
   if(t.dataset.removeJudge){
     const j=Cloud.judges.find(j=>j.uid===t.dataset.removeJudge);
-    if(j&&confirm(`Remove ${j.name} from the session? Their votes so far still count. They can rejoin with the code.`))Cloud.removeJudge(j.uid);
+    if(j&&confirm(`Remove ${j.name} from the group? Their votes so far still count. They can rejoin anytime.`))Cloud.removeJudge(j.uid);
     return;
   }
   if(t.dataset.editStreet){openStreet(t.dataset.editStreet);openSheet(t.dataset.editNum);return;}
@@ -969,7 +1044,7 @@ document.addEventListener('click',e=>{
     'call-house':()=>{if(!Cloud.session.current&&sheet.cat)Cloud.callHouse(sheet.street,sheet.num,sheet.cat);},
     'close-voting':closeVoting,
     'pick-host':()=>{pickingHost=true;renderSessionCard();},'cancel-pick-host':()=>{pickingHost=false;renderSessionCard();},
-    'claim-host':claimHost,
+    'claim-host':claimHost,'end-session':endSession,
     'close-viewer':closeViewer,'viewer-prev':()=>stepViewer(-1),'viewer-next':()=>stepViewer(1),'viewer-save':saveViewerPhoto,
     'zip-winners':()=>zipPhotos(true),'zip-all':()=>zipPhotos(false),'go-call':goToCall,
   })[t.dataset.action]?.();
@@ -997,13 +1072,15 @@ if(CLOUD){
   $('danger-card').style.display='none';
   Cloud.onChange(kind=>{
     if(kind==='error')toast('Sync problem. Votes are saved and will retry.');
-    if(kind==='session-missing')toast('That session has ended');
-    if(kind==='removed'){lastCallId=null;openCall=null;closeSheet();toast('The host removed you from the session. Rejoin with the code anytime.');}
+    if(kind==='session-missing')toast('That group no longer exists');
+    if(kind==='ended'){lastCallId=null;openCall=null;closeSheet();store.set('luth_last_session_obj',null);activeGroups=null;refreshGroups(true);toast('The judging group has ended');}
+    if(kind==='removed'){lastCallId=null;openCall=null;closeSheet();toast('The host removed you from the group. You can rejoin from the Streets screen.');}
     if(kind==='session'||kind==='judges')onSessionUpdate();
     renderAll();
   });
   Cloud.ready.then(uid=>{
-    judgeId=uid;showIdentity();renderAll();
+    judgeId=uid;showIdentity();renderAll();refreshGroups(true);
+    if(Cloud.sessionCode)rememberGroup();
     const join=new URLSearchParams(location.search).get('join');
     if(join&&join.toUpperCase()!==Cloud.sessionCode){history.replaceState(null,'',location.pathname);joinSession(join);}
   }).catch(()=>toast('Could not connect to sync. Check your signal.'));

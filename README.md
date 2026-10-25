@@ -25,6 +25,10 @@ With `firebase.config.js` filled in, votes and photos sync to Firestore under `c
 
 **Judging sessions:** one person taps **Start session** and shares the 4-letter code or invite link. When the host opens a house and taps **Open voting**, every judge's phone jumps to that house. The host sees who has scored, skipped, or is still deciding, and taps **Close voting** when everyone is done (saving their own vote does not close it). After voting, phones return to the street's house list.
 
+**Ending a round:** the host taps **End judging group** (it asks first). Everyone leaves the group and it can't be reopened. Judges who leave by mistake get a one-tap **Rejoin**, and active groups are listed on the Streets screen.
+
+**What counts:** only votes cast in a group on a house the host opened, in the category the host picked. A house places once `MIN_JUDGES` (3) judges have scored it. Standings list everything else under **Not counted**, and the CSV has `official`, `sessionCode`, and `callId` columns for auditing. The rules enforce this: official votes can only be written while their house is open, and are locked once it closes.
+
 **Setup:** paste `firestore.rules` into Firebase console → Firestore → Rules → Publish. Re-paste it whenever it changes.
 
 **Each year:** bump `YEAR` in `streets.config.js` and rerun the address import.

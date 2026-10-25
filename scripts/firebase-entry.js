@@ -3,5 +3,6 @@ export { initializeApp } from 'firebase/app';
 export { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator } from 'firebase/auth';
 export {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator,
-  doc, collection, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
+  doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
+  query, where,
 } from 'firebase/firestore';

@@ -2,23 +2,47 @@ rules_version = '2';
 // Paste into Firebase console → Firestore → Rules, then Publish.
 // Every phone signs in anonymously. A judge can only write their own votes and photos,
 // and only the session host can change which house is being judged.
+//
+// Official votes (the ones that count) carry the sessionCode and callId of a house the
+// host opened. They can only be written while that exact house is open, by a judge in
+// that group, in the category the host picked, and are locked once voting closes.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function mine(id) { return id.matches(request.auth.uid + '__.+'); }
     function star(v) { return v is int && v >= 1 && v <= 5; }
+    function sessionPath(year, code) { return /databases/$(database)/documents/contests/$(year)/sessions/$(code); }
+    function inGroup(year, code) {
+      return exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.auth.uid));
+    }
+    // An official vote must match the house currently open in its group.
+    function officialOk(year, v) {
+      return v.get('callId', null) == null || (
+        get(sessionPath(year, v.sessionCode)).data.current.callId == v.callId
+        && get(sessionPath(year, v.sessionCode)).data.current.cat == v.category
+        && inGroup(year, v.sessionCode));
+    }
+    // An existing official vote can only change while its house is still open.
+    function unlocked(year, old) {
+      return old.get('callId', null) == null
+        || get(sessionPath(year, old.sessionCode)).data.current.callId == old.callId;
+    }
+    function validVote(v) {
+      return v.judgeId == request.auth.uid
+        && v.category in ['wonderful', 'anything', 'tree', 'doors']
+        && star(v.curbAppeal) && star(v.overallPresentation)
+        && (v.uniqueDesign == null || star(v.uniqueDesign))
+        && v.notes.size() <= 2000;
+    }
 
     match /contests/{year} {
       match /votes/{voteId} {
         allow read: if signedIn();
-        allow create, update: if signedIn() && mine(voteId)
-          && request.resource.data.judgeId == request.auth.uid
-          && request.resource.data.category in ['wonderful', 'anything', 'tree', 'doors']
-          && star(request.resource.data.curbAppeal)
-          && star(request.resource.data.overallPresentation)
-          && (request.resource.data.uniqueDesign == null || star(request.resource.data.uniqueDesign))
-          && request.resource.data.notes.size() <= 2000;
-        allow delete: if signedIn() && mine(voteId);
+        allow create: if signedIn() && mine(voteId) && validVote(request.resource.data)
+          && officialOk(year, request.resource.data);
+        allow update: if signedIn() && mine(voteId) && validVote(request.resource.data)
+          && unlocked(year, resource.data) && officialOk(year, request.resource.data);
+        allow delete: if signedIn() && mine(voteId) && unlocked(year, resource.data);
       }
       match /photos/{voteId} {
         allow read: if signedIn();
@@ -30,18 +54,20 @@ service cloud.firestore {
         allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
         // The host can update the session and hand hosting to any judge in it.
         // Any judge in the session can take over hosting (only hostUid/hostName, set to themselves).
-        allow update: if signedIn() && (
+        // Nobody can reopen an ended group.
+        allow update: if signedIn() && resource.data.get('status', 'active') != 'ended' && (
           (resource.data.hostUid == request.auth.uid
             && exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.resource.data.hostUid)))
-          || (exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.auth.uid))
+          || (inGroup(year, code)
             && request.resource.data.hostUid == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostUid', 'hostName'])));
         match /judges/{uid} {
           allow read: if signedIn();
-          allow write: if signedIn() && uid == request.auth.uid;
-          // The host can remove a judge who left without tapping Leave.
-          allow delete: if signedIn()
-            && get(/databases/$(database)/documents/contests/$(year)/sessions/$(code)).data.hostUid == request.auth.uid;
+          // Judges join or update only themselves, and only while the group is active.
+          allow create, update: if signedIn() && uid == request.auth.uid
+            && get(sessionPath(year, code)).data.get('status', 'active') == 'active';
+          allow delete: if signedIn() && (uid == request.auth.uid
+            || get(sessionPath(year, code)).data.hostUid == request.auth.uid);
         }
       }
     }

@@ -2,7 +2,7 @@
 // Firestore layout, all under contests/{YEAR}:
 //   votes/{uid}__{address}     one judge's vote for one house
 //   photos/{uid}__{address}    that vote's photo, kept apart so vote lists stay small
-//   sessions/{CODE}            hostUid, current: {street, num, callId} | null
+//   sessions/{CODE}            hostUid, status: active|ended, current: {street, num, cat, callId} | null
 //   sessions/{CODE}/judges/{uid}  name, doneCallId (last called house they finished)
 // Firestore's offline cache queues writes when a phone loses signal.
 (function () {
@@ -102,6 +102,7 @@
     localStorage.setItem('luth_session', code);
     unsubSession = F.onSnapshot(ref('sessions', code), snap => {
       if (!snap.exists()) { Cloud.leaveSession(); emit('session-missing'); return; }
+      if (snap.data().status === 'ended') { dropOut(); emit('ended'); emit('session'); return; }
       Cloud.session = snap.data();
       emit('session');
     }, err => { console.error(err); emit('error'); });
@@ -109,11 +110,14 @@
       Cloud.judges = snap.docs.map(d => ({ uid: d.id, ...d.data() })).sort((a, b) => a.name.localeCompare(b.name));
       // The host removed this judge (or their entry is gone): drop out locally; they can rejoin by code.
       if (Cloud.uid && !snap.metadata.hasPendingWrites && !Cloud.judges.some(j => j.uid === Cloud.uid)) {
-        stopWatching(); Cloud.sessionCode = null; localStorage.removeItem('luth_session');
-        emit('removed'); emit('session'); return;
+        dropOut(); emit('removed'); emit('session'); return;
       }
       emit('judges');
     });
+  }
+  // Leave locally without touching the server (group ended, or we were removed).
+  function dropOut() {
+    stopWatching(); Cloud.sessionCode = null; localStorage.removeItem('luth_session');
   }
   function stopWatching() {
     unsubSession && unsubSession();
@@ -128,7 +132,7 @@
       const code = Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
       const r = ref('sessions', code);
       if ((await F.getDoc(r)).exists()) continue;
-      await F.setDoc(r, { hostUid: Cloud.uid, hostName: name, current: null, createdAt: F.serverTimestamp() });
+      await F.setDoc(r, { hostUid: Cloud.uid, hostName: name, status: 'active', current: null, createdAt: F.serverTimestamp() });
       await F.setDoc(ref('sessions', code, 'judges', Cloud.uid), { name, joinedAt: F.serverTimestamp(), doneCallId: null });
       watchSession(code);
       return code;
@@ -138,9 +142,30 @@
   Cloud.joinSession = async (code, name) => {
     await Cloud.ready;
     code = code.trim().toUpperCase();
-    if (!(await F.getDoc(ref('sessions', code))).exists()) throw new Error('No session with code ' + code);
+    const s = await F.getDoc(ref('sessions', code));
+    if (!s.exists()) throw new Error('No group with code ' + code);
+    if (s.data().status === 'ended') throw new Error('That judging group has ended');
     await F.setDoc(ref('sessions', code, 'judges', Cloud.uid), { name, joinedAt: F.serverTimestamp(), doneCallId: null });
     watchSession(code);
+  };
+  // Groups judging right now (started in the last 18 hours, not ended), with judge counts.
+  Cloud.listActiveSessions = async () => {
+    await Cloud.ready;
+    const snap = await F.getDocs(F.query(col('sessions'), F.where('status', '==', 'active')));
+    const cutoff = Date.now() - 18 * 3600 * 1000;
+    const out = [];
+    for (const d of snap.docs) {
+      const s = d.data(), t = s.createdAt && s.createdAt.toMillis ? s.createdAt.toMillis() : Date.now();
+      if (t < cutoff) continue;
+      const judges = (await F.getDocs(col('sessions', d.id, 'judges'))).size;
+      if (judges) out.push({ code: d.id, hostName: s.hostName, judges, createdAt: t });
+    }
+    return out.sort((a, b) => b.createdAt - a.createdAt);
+  };
+  // Host only: end the group for everyone. Votes already cast are kept.
+  Cloud.endSession = () => {
+    if (!Cloud.isHost()) return Promise.resolve();
+    return F.updateDoc(ref('sessions', Cloud.sessionCode), { status: 'ended', current: null, endedAt: F.serverTimestamp() });
   };
   Cloud.leaveSession = () => {
     const code = Cloud.sessionCode;

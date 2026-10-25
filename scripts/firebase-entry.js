@@ -4,5 +4,5 @@ export { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator } f
 export {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator,
   doc, collection, getDoc, getDocs, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp,
-  query, where,
+  query, where, arrayUnion,
 } from 'firebase/firestore';

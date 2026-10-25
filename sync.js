@@ -2,7 +2,8 @@
 // Firestore layout, all under contests/{YEAR}:
 //   votes/{uid}__{address}     one judge's vote for one house
 //   photos/{uid}__{address}    that vote's photo, kept apart so vote lists stay small
-//   sessions/{CODE}            hostUid, status: active|ended, current: {street, num, cat, callId} | null
+//   sessions/{CODE}            hostUid, status: active|ended, current: {street, num, cat, callId} | null,
+//                              cancelled: [callId] (houses opened by mistake; their votes don't count)
 //   sessions/{CODE}/judges/{uid}  name, doneCallId (last called house they finished)
 // Firestore's offline cache queues writes when a phone loses signal.
 (function () {
@@ -12,7 +13,7 @@
 
   const Cloud = {
     enabled: !!(cfg && window.LUTH_FB),
-    uid: null, votes: [], session: null, sessionCode: null, judges: [], online: navigator.onLine,
+    uid: null, votes: [], cancelled: new Set(), session: null, sessionCode: null, judges: [], online: navigator.onLine,
     onChange(fn) { listeners.add(fn); },
   };
   window.Cloud = Cloud;
@@ -56,6 +57,11 @@
       Cloud.votes = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(v => typeof v.address === 'string' && typeof v.total === 'number');
       emit('votes');
     }, err => { console.error(err); emit('error'); });
+    // Calls the host cancelled (wrong house), across every group this year.
+    F.onSnapshot(col('sessions'), snap => {
+      Cloud.cancelled = new Set(snap.docs.flatMap(d => d.data().cancelled || []));
+      emit('votes');
+    }, err => console.error(err));
     const saved = localStorage.getItem('luth_session');
     if (saved) watchSession(saved);
   });
@@ -198,6 +204,13 @@
     if (street && (Cloud.session.current || !cat)) return; // one open house at a time, category required
     const current = street ? { street, num: String(num), cat, callId: Date.now().toString(36) } : null;
     F.updateDoc(ref('sessions', Cloud.sessionCode), { current }).catch(console.error);
+  };
+  // Host only: close the open house and void its votes (opened the wrong house or category).
+  Cloud.cancelHouse = () => {
+    const c = Cloud.isHost() && Cloud.session.current;
+    if (!c) return Promise.resolve();
+    Cloud.cancelled.add(c.callId);
+    return F.updateDoc(ref('sessions', Cloud.sessionCode), { current: null, cancelled: F.arrayUnion(c.callId) });
   };
   // Tell the host this judge is finished with the called house (scored or skipped).
   Cloud.markDone = callId => {

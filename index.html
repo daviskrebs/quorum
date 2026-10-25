@@ -110,6 +110,7 @@
   .sheet.open{transform:translateY(0)}
   .sheet-grab{width:40px;height:5px;background:#DDD;border-radius:3px;margin:8px auto 4px}
   .sheet-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;padding:6px 0 12px;position:sticky;top:0;background:var(--bg);z-index:1}
+  .sheet-back{border:none;background:none;color:var(--green);font-size:15px;font-weight:500;padding:4px 0 0;cursor:pointer}
   .sheet-addr{font-family:'Playfair Display',serif;font-size:22px;color:var(--green);line-height:1.15}
   .sheet-close{background:#EEE;border:none;width:32px;height:32px;border-radius:50%;font-size:18px;cursor:pointer;flex-shrink:0}
   .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
@@ -285,6 +286,7 @@
 <div class="sheet-backdrop" id="sheet-backdrop" data-action="close-sheet"></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true">
   <div class="sheet-grab"></div>
+  <button class="sheet-back" data-action="close-sheet" id="sheet-back"></button>
   <div class="sheet-head">
     <div><div class="sheet-addr" id="sheet-addr"></div><div class="muted" id="sheet-status"></div></div>
     <button class="sheet-close" data-action="close-sheet" aria-label="Close">&#215;</button>
@@ -537,7 +539,11 @@ function openSheet(num,presetCat){
     photo:existing?existing.photo||null:null,dirty:false,open:true};
   if(existing&&existing.hasPhoto&&CLOUD)Cloud.photo(existing.id).then(p=>{if(sheet.open&&sheet.num===num&&!sheet.photo)setPhoto(p);});
   $('sheet-addr').textContent=a;
-  $('sheet-status').textContent=existing?'Already scored. Saving updates your vote.':getSkips()[a]?'Marked as no display':'';
+  $('sheet-back').innerHTML='&#8249; Back to '+esc(currentStreet);
+  const callNow=CLOUD&&Cloud.session&&Cloud.session.current;
+  const redo=existing&&callNow&&callNow.street===currentStreet&&callNow.num===String(num)&&existing.callId!==callNow.callId;
+  $('sheet-status').textContent=redo?'Your earlier scores are filled in. Save to count them for this round.'
+    :existing?'Already scored. Saving updates your vote.':getSkips()[a]?'Marked as no display':'';
   $('clear-house-btn').style.display=(existing||getSkips()[a])?'':'none';
   $('notes-input').value=existing?existing.notes:'';
   renderSheet();setPhoto(sheet.photo);renderHostPanel();
@@ -549,7 +555,7 @@ function closeSheet(){sheet.open=false;$('sheet').classList.remove('open');$('sh
 function voteLocked(){
   if(!CLOUD||!sheet.open)return false;
   const v=myVote(addrOf(sheet.num,sheet.street));
-  if(!v||!v.callId)return false;
+  if(!v||!v.callId||isCancelled(v))return false;
   const c=Cloud.session&&Cloud.session.current;
   return !(c&&c.callId===v.callId&&Cloud.sessionCode===v.sessionCode);
 }
@@ -614,6 +620,11 @@ function afterVote(msg){
   if(called){Cloud.markDone(called.callId);closeSheet();toast(msg+' · waiting for the host');return;}
   closeSheet();toast(msg);
 }
+function cancelHouse(){
+  const c=Cloud.session&&Cloud.session.current;if(!c)return;
+  if(!confirm(`Cancel voting on ${addrOf(c.num,c.street)}?\n\nUse this if you opened the wrong house or picked the wrong category. Any scores already given for it won't count. You can open it again afterward.`))return;
+  Cloud.cancelHouse().then(()=>{closeSheet();toast('Voting cancelled');}).catch(()=>toast('Could not cancel. Try again.'));
+}
 function closeVoting(){
   const c=calledHere()||(Cloud.session&&Cloud.session.current);if(!c)return;
   const waiting=Cloud.judges.filter(j=>judgeStatus(j,c).cls==='st-wait').map(j=>j.name);
@@ -669,7 +680,8 @@ function renderMyVotes(){
 }
 // Houses per category, best average first.
 // Official = cast on a house the host opened in a group. Phone-only mode has no groups, so every vote counts.
-const isOfficial=v=>!CLOUD||!!v.callId;
+const isCancelled=v=>CLOUD&&!!v.callId&&Cloud.cancelled.has(v.callId);
+const isOfficial=v=>!CLOUD||(!!v.callId&&!isCancelled(v));
 const MIN_JUDGES=LUTH_CONFIG.MIN_JUDGES||3;
 // Houses per category, best average first. Official votes only unless includeAll.
 function rankings(includeAll){
@@ -693,16 +705,20 @@ function renderResults(){
   const groups=placings(),all=rankings();
   const el=$('results-content');
   const short=CLOUD?Object.entries(all).flatMap(([k,hs])=>hs.filter(h=>h.totals.length<MIN_JUDGES).map(h=>({...h,cat:k}))):[];
-  const unofficial=CLOUD?getVotes().filter(v=>!isOfficial(v)):[];
-  if(!Object.keys(groups).length&&!short.length&&!unofficial.length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127942;</div>No votes yet.</div>';return;}
+  const unofficial=CLOUD?getVotes().filter(v=>!isOfficial(v)&&!isCancelled(v)):[];
+  const cancelled=CLOUD?getVotes().filter(isCancelled):[];
+  if(!Object.keys(groups).length&&!short.length&&!unofficial.length&&!cancelled.length){el.innerHTML='<div class="empty-state"><div style="font-size:32px;margin-bottom:8px">&#127942;</div>No votes yet.</div>';return;}
   const rule=CLOUD?`<p class="muted" style="margin:0 4px 12px;font-size:12px">Only votes cast in a judging group on a house the host opened count. A house places once ${MIN_JUDGES} judges have scored it.</p>`:'';
-  const audit=CLOUD&&(short.length||unofficial.length)?`<div class="section-label">Not counted</div>
+  const voteRow=v=>`<div class="vote-item" style="cursor:default">${thumb(v)}<div style="flex:1"><div class="vote-addr">${esc(v.address)}</div>
+        <div class="muted" style="font-size:11px">${[v.judgeName||'Judge',CATS[v.category],v.timestamp&&!isNaN(new Date(v.timestamp))?new Date(v.timestamp).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''].filter(Boolean).map(esc).join(' &middot; ')}</div></div><div class="vote-score" style="color:#aaa">${v.total}</div></div>`;
+  const audit=CLOUD&&(short.length||unofficial.length||cancelled.length)?`<div class="section-label">Not counted</div>
     ${short.length?`<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0;font-size:14px">Needs ${MIN_JUDGES} judges</div>
       ${short.map(h=>`<div class="vote-item" style="cursor:default">${thumb(h.photoVote)}<div style="flex:1"><div class="vote-addr">${esc(h.address)}</div>
         <div class="muted" style="font-size:11px">${esc(CATS[h.cat])} &middot; ${h.totals.length} of ${MIN_JUDGES} judges</div></div><div class="vote-score" style="color:#aaa">${h.avg}</div></div>`).join('')}</div>`:''}
     ${unofficial.length?`<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0;font-size:14px">Outside a judging group</div>
-      ${unofficial.sort((a,b)=>a.address.localeCompare(b.address)).map(v=>`<div class="vote-item" style="cursor:default">${thumb(v)}<div style="flex:1"><div class="vote-addr">${esc(v.address)}</div>
-        <div class="muted" style="font-size:11px">${[v.judgeName||'Judge',CATS[v.category],v.timestamp&&!isNaN(new Date(v.timestamp))?new Date(v.timestamp).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''].filter(Boolean).map(esc).join(' &middot; ')}</div></div><div class="vote-score" style="color:#aaa">${v.total}</div></div>`).join('')}</div>`:''}`:'';
+      ${unofficial.sort((a,b)=>a.address.localeCompare(b.address)).map(voteRow).join('')}</div>`:''}
+    ${cancelled.length?`<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0;font-size:14px">Cancelled by the host (wrong house)</div>
+      ${cancelled.sort((a,b)=>a.address.localeCompare(b.address)).map(voteRow).join('')}</div>`:''}`:'';
   el.innerHTML=rule+(Object.keys(groups).length?'':`<div class="empty-state" style="padding:16px">No house has ${MIN_JUDGES} judges yet.</div>`)+CATS_LIST.filter(c=>groups[c.key]).map(c=>{
     const ranked=groups[c.key];
     return `<div class="card" style="padding:0 0 4px"><div class="card-title" style="padding:14px 14px 0">${esc(c.label)}</div>
@@ -818,8 +834,10 @@ async function claimHost(){
   const name=judgeName();if(!name)return;
   try{await Cloud.claimHost(name);}catch(e){toast('Could not take over. Try again.');}
 }
+// Only a vote cast during this opening of the house counts as done.
+const voteForCall=(uid,c)=>getVotes().find(v=>v.judgeId===uid&&v.callId===c.callId&&v.address===addrOf(c.num,c.street));
 function judgeStatus(j,c){
-  const v=getVotes().find(v=>v.judgeId===j.uid&&v.address===addrOf(c.num,c.street));
+  const v=voteForCall(j.uid,c);
   if(v)return{cls:'st-done',text:'&#10003; '+v.total};
   if(j.doneCallId===c.callId)return{cls:'st-skip',text:'skipped'};
   return{cls:'st-wait',text:'waiting'};
@@ -848,7 +866,8 @@ function renderHostPanel(){
   const done=Cloud.judges.filter(j=>judgeStatus(j,called).cls!=='st-wait').length;
   el.innerHTML=`<div class="host-panel"><div style="display:flex;justify-content:space-between;margin-bottom:6px">
     <b style="color:var(--green)">&#128227; Voting open</b><span class="muted">${done} of ${Cloud.judges.length} done</span></div>${rows}
-    <button class="btn btn-secondary" style="margin-top:10px" data-action="close-voting">Close voting${done<Cloud.judges.length?` (${Cloud.judges.length-done} waiting)`:''}</button></div>`;
+    <button class="btn btn-secondary" style="margin-top:10px" data-action="close-voting">Close voting${done<Cloud.judges.length?` (${Cloud.judges.length-done} waiting)`:''}</button>
+    <button class="btn btn-ghost" style="font-size:14px;padding:10px" data-action="cancel-house">Wrong house or category? Cancel voting</button></div>`;
 }
 function renderCallbar(){
   const c=CLOUD&&Cloud.session&&Cloud.session.current;
@@ -861,7 +880,7 @@ function renderCallbar(){
     $('callbar-text').innerHTML=`<b>Voting open: ${esc(addr)}</b>${done} of ${Cloud.judges.length} judges done`;
     $('callbar-go').textContent='View';
   }else{
-    const mine=myVote(addr)||Cloud.judges.find(j=>j.uid===judgeId&&j.doneCallId===c.callId);
+    const mine=voteForCall(judgeId,c)||Cloud.judges.find(j=>j.uid===judgeId&&j.doneCallId===c.callId);
     $('callbar-text').innerHTML=`<b>Now judging: ${esc(addr)}</b>${mine?'Done · waiting for the host':c.cat?esc(CATS[c.cat]):'The host opened voting'}`;
     $('callbar-go').textContent=mine?'Edit':'Score it';
   }
@@ -887,7 +906,10 @@ function onSessionUpdate(){
   // Host closed voting: leave that house unless the judge is mid-score (they can still save).
   if(openCall&&(!c||c.callId!==openCall.callId)&&!Cloud.isHost()){
     const was=openCall;openCall=null;
-    if(sheet.open&&sheet.street===was.street&&sheet.num===was.num){
+    const wasCancelled=((Cloud.session&&Cloud.session.cancelled)||[]).includes(was.callId);
+    if(wasCancelled&&sheet.open&&sheet.street===was.street&&sheet.num===was.num){
+      closeSheet();toast(`Host cancelled voting on ${addrOf(was.num,was.street)}`);
+    }else if(sheet.open&&sheet.street===was.street&&sheet.num===was.num){
       if(sheet.dirty)toast("Host closed voting before you saved. This vote won't count.");
       else if(!c){closeSheet();toast('Host closed voting');}
     }
@@ -897,7 +919,7 @@ function onSessionUpdate(){
   lastCallId=c.callId;
   const addr=addrOf(c.num,c.street);
   const me=Cloud.judges.find(j=>j.uid===judgeId);
-  if(myVote(addr)||(me&&me.doneCallId===c.callId))return;
+  if(voteForCall(judgeId,c)||(me&&me.doneCallId===c.callId))return;
   if(sheet.open&&sheet.dirty&&!calledHere()){toast('Host opened voting: '+addr);return;}
   goToCall();toast('Host opened voting: '+addr);
   if(navigator.vibrate)navigator.vibrate(150);
@@ -1042,7 +1064,7 @@ document.addEventListener('click',e=>{
     'remove-photo':()=>{setPhoto(null);sheet.dirty=true;},export:exportCSV,'clear-all':clearAll,
     'start-session':startSession,'join-session':()=>joinSession(),invite,'leave-session':leaveSession,
     'call-house':()=>{if(!Cloud.session.current&&sheet.cat)Cloud.callHouse(sheet.street,sheet.num,sheet.cat);},
-    'close-voting':closeVoting,
+    'close-voting':closeVoting,'cancel-house':cancelHouse,
     'pick-host':()=>{pickingHost=true;renderSessionCard();},'cancel-pick-host':()=>{pickingHost=false;renderSessionCard();},
     'claim-host':claimHost,'end-session':endSession,
     'close-viewer':closeViewer,'viewer-prev':()=>stepViewer(-1),'viewer-next':()=>stepViewer(1),'viewer-save':saveViewerPhoto,

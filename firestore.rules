@@ -22,9 +22,11 @@ service cloud.firestore {
         && get(sessionPath(year, v.sessionCode)).data.current.cat == v.category
         && inGroup(year, v.sessionCode));
     }
-    // An existing official vote can only change while its house is still open.
+    // An existing official vote can only change while its house is still open,
+    // or if the host cancelled that call (opened the wrong house).
     function unlocked(year, old) {
       return old.get('callId', null) == null
+        || old.callId in get(sessionPath(year, old.sessionCode)).data.get('cancelled', [])
         || get(sessionPath(year, old.sessionCode)).data.current.callId == old.callId;
     }
     function validVote(v) {

@@ -1,7 +1,7 @@
 {
-  "name": "Light Up the Hood",
-  "short_name": "Light Up",
-  "description": "Judge the Bellevue holiday lights contest street by street.",
+  "name": "Quorum · Bellevue Holiday Lights",
+  "short_name": "Quorum",
+  "description": "Host-led group judging for the Bellevue Holiday Lights Competition.",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#FFFDF5",

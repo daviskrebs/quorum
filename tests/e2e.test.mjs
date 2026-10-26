@@ -113,7 +113,7 @@ test('closed votes are locked, and the rules reject forged or out-of-range votes
   await sam.evaluate(() => { openStreet('Greycourt Avenue'); openSheet('1218'); }); await sleep(300);
   assert.match(await text(sam, '#sheet-status'), /locked/);
   const results = await sam.evaluate(async code => {
-    const F = LUTH_FB, app = F.initializeApp(LUTH_FIREBASE, 'probe'), auth = F.getAuth(app);
+    const F = QUORUM_FB, app = F.initializeApp(QUORUM_FIREBASE, 'probe'), auth = F.getAuth(app);
     F.connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
     const db = F.initializeFirestore(app, {}); F.connectFirestoreEmulator(db, 'localhost', 8080);
     const uid = (await F.signInAnonymously(auth)).user.uid;

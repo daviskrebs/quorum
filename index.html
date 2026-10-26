@@ -7,10 +7,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Light Up">
+<meta name="apple-mobile-web-app-title" content="Quorum">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="manifest" href="manifest.webmanifest">
-<title>Light Up the Hood</title>
+<title>Quorum · Bellevue Holiday Lights Competition</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;700&display=swap">
 <style>
   :root{
@@ -27,6 +27,7 @@
   /* Header */
   .header{background:var(--green);padding:calc(14px + var(--safe-top)) 16px 14px;color:#fff;position:sticky;top:0;z-index:20}
   .header-row{display:flex;align-items:center;gap:10px;min-height:36px}
+  .brand{font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:2px}
   .header h1{font-family:'Playfair Display',serif;color:var(--cream);font-size:21px;line-height:1.15;flex:1}
   .header .sub{color:rgba(255,255,255,.7);font-size:12px;margin-top:2px}
   .back{background:rgba(255,255,255,.12);border:none;color:#fff;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;flex-shrink:0}
@@ -186,8 +187,9 @@
   <section id="screen-streets" class="screen active">
     <header class="header">
       <div class="lights"><i class="bulb"></i><i class="bulb"></i><i class="bulb"></i><i class="bulb"></i><i class="bulb"></i><i class="bulb"></i><i class="bulb"></i><i class="bulb"></i></div>
-      <h1>Light Up the Hood</h1>
-      <div class="sub">Bellevue Holiday Lights &middot; <span id="judge-badge"></span></div>
+      <div class="brand">Quorum</div>
+      <h1 id="event-name">Bellevue Holiday Lights Competition</h1>
+      <div class="sub"><span id="event-place">Richmond, VA</span> &middot; <span id="judge-badge"></span></div>
       <div class="progress"><div id="overall-bar" style="width:0"></div></div>
       <div class="sub" id="overall-text" style="margin-top:6px"></div>
     </header>
@@ -351,10 +353,10 @@
 <script>
 // Clear leftover phone data when PHONE_DATA_VERSION changes (judge name is kept).
 try{
-  const v=String(LUTH_CONFIG.PHONE_DATA_VERSION||1);
-  if(localStorage.getItem('luth_phone_data_version')!==v){
-    ['luth_votes','luth_skips','luth_extra_houses','luth_session','luth_last_session_obj'].forEach(k=>localStorage.removeItem(k));
-    localStorage.setItem('luth_phone_data_version',v);
+  const v=String(QUORUM_CONFIG.PHONE_DATA_VERSION||1);
+  if(localStorage.getItem('quorum_phone_data_version')!==v){
+    ['quorum_votes','quorum_skips','quorum_extra_houses','quorum_session','quorum_last_session_obj'].forEach(k=>localStorage.removeItem(k));
+    localStorage.setItem('quorum_phone_data_version',v);
   }
 }catch(e){}
 </script>
@@ -370,8 +372,8 @@ const CATS_LIST=[
   {key:'doors',    label:'Best Doors in Bellevue',sub:''},
 ];
 const CATS=Object.fromEntries(CATS_LIST.map(c=>[c.key,c.label]));
-const STREETS=LUTH_CONFIG.STREETS;
-const DATA=(window.LUTH_ADDRESSES&&window.LUTH_ADDRESSES.streets)||{};
+const STREETS=QUORUM_CONFIG.STREETS;
+const DATA=(window.QUORUM_ADDRESSES&&window.QUORUM_ADDRESSES.streets)||{};
 
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -383,18 +385,18 @@ const store={
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch{toast('Storage full: export and remove photos');return false}},
 };
 const CLOUD=Cloud.enabled;
-const getVotes=()=>CLOUD?Cloud.votes:store.get('luth_votes',[]);
+const getVotes=()=>CLOUD?Cloud.votes:store.get('quorum_votes',[]);
 // Save or remove this judge's vote. Cloud mode keeps photos in their own documents.
 function writeVote(vote,photo){
   if(CLOUD){Cloud.putVote(vote,photo);return true;}
   const votes=getVotes();const i=votes.findIndex(v=>v.address===vote.address&&v.judgeId===judgeId);
   vote.photo=photo||null;
   if(i>=0)votes[i]=vote;else votes.push(vote);
-  return store.set('luth_votes',votes);
+  return store.set('quorum_votes',votes);
 }
 function deleteVote(address){
   if(CLOUD){Cloud.removeVote(address);return;}
-  store.set('luth_votes',getVotes().filter(v=>!(v.address===address&&v.judgeId===judgeId)));
+  store.set('quorum_votes',getVotes().filter(v=>!(v.address===address&&v.judgeId===judgeId)));
 }
 function myVote(address){return getVotes().find(v=>v.address===address&&v.judgeId===judgeId);}
 // Photo markup; cloud photos load after render (see fillPhotos).
@@ -410,16 +412,16 @@ function fillPhotos(root){
   });
 }
 function judgeName(){
-  let n=store.get('luth_judge_name','');
+  let n=store.get('quorum_judge_name','');
   while(!n){n=(prompt('Your name (shown to the other judges)')||'').trim();if(!n)return null;}
-  store.set('luth_judge_name',n);return n;
+  store.set('quorum_judge_name',n);return n;
 }
-const getSkips=()=>store.get('luth_skips',{});        // {address:true}
-const getExtras=()=>store.get('luth_extra_houses',{}); // {street:[num]}
+const getSkips=()=>store.get('quorum_skips',{});        // {address:true}
+const getExtras=()=>store.get('quorum_extra_houses',{}); // {street:[num]}
 
 function getJudgeId(){
-  let id=store.get('luth_judge_id',null);
-  if(!id){id='J'+Math.random().toString(36).slice(2,8).toUpperCase();store.set('luth_judge_id',id);}
+  let id=store.get('quorum_judge_id',null);
+  if(!id){id='J'+Math.random().toString(36).slice(2,8).toUpperCase();store.set('quorum_judge_id',id);}
   return id;
 }
 let judgeId=CLOUD?null:getJudgeId(); // Cloud mode: set to the Firebase user id once signed in.
@@ -512,7 +514,7 @@ function addHouse(){
   const input=$('add-house-input');const n=input.value.trim().toUpperCase();
   if(!/^\d+[A-Z]?$/.test(n)){toast('Enter a house number');return;}
   const extras=getExtras();const list=extras[currentStreet]||[];
-  if(!housesOn(currentStreet).all.includes(n)){list.push(n);extras[currentStreet]=list;store.set('luth_extra_houses',extras);}
+  if(!housesOn(currentStreet).all.includes(n)){list.push(n);extras[currentStreet]=list;store.set('quorum_extra_houses',extras);}
   input.value='';renderStreet();openSheet(n);
 }
 function finishStreet(){
@@ -521,7 +523,7 @@ function finishStreet(){
   if(!open.length){toast('Street already complete');return;}
   if(!confirm(`Mark ${open.length} remaining house${open.length>1?'s':''} as no display?`))return;
   open.forEach(n=>skips[addrOf(n,currentStreet)]=true);
-  store.set('luth_skips',skips);renderStreet();toast('Street done');
+  store.set('quorum_skips',skips);renderStreet();toast('Street done');
 }
 function shareStreet(){
   const url=location.href.split(/[?#]/)[0]+'?street='+encodeURIComponent(currentStreet);
@@ -639,27 +641,27 @@ function saveVote(){
   if(cat==='anything'&&!s.unique){toast('Rate Unique Design');return;}
   const a=addrOf(sheet.num,currentStreet);
   const total=cat==='anything'?Math.round((s.curb+s.overall+s.unique)/3*10)/10:Math.round((s.curb+s.overall)/2*10)/10;
-  const vote={judgeId,judgeName:store.get('luth_judge_name','')||null,timestamp:new Date().toISOString(),address:a,street:currentStreet,houseNum:String(sheet.num),
+  const vote={judgeId,judgeName:store.get('quorum_judge_name','')||null,timestamp:new Date().toISOString(),address:a,street:currentStreet,houseNum:String(sheet.num),
     category:cat,categoryName:CATS[cat],curbAppeal:s.curb,overallPresentation:s.overall,
     uniqueDesign:cat==='anything'?s.unique:null,notes:$('notes-input').value.trim(),total};
   // Official only when the host has this house open; tagged so the rules and standings can check it.
   const called=calledHere();
   vote.sessionCode=called?Cloud.sessionCode:null;vote.callId=called?called.callId:null;
   if(!writeVote(vote,sheet.photo))return;
-  const skips=getSkips();if(skips[a]){delete skips[a];store.set('luth_skips',skips);}
+  const skips=getSkips();if(skips[a]){delete skips[a];store.set('quorum_skips',skips);}
   afterVote('Saved '+a);
 }
 function skipHouse(){
   const a=addrOf(sheet.num,currentStreet);
   if(myVote(a))deleteVote(a);
-  const skips=getSkips();skips[a]=true;store.set('luth_skips',skips);
+  const skips=getSkips();skips[a]=true;store.set('quorum_skips',skips);
   afterVote('Skipped '+a);
 }
 function clearHouse(){
   const a=addrOf(sheet.num,currentStreet);
   if(!confirm('Clear your vote for '+a+'?'))return;
   if(myVote(a))deleteVote(a);
-  const skips=getSkips();delete skips[a];store.set('luth_skips',skips);
+  const skips=getSkips();delete skips[a];store.set('quorum_skips',skips);
   closeSheet();renderStreet();
 }
 
@@ -682,7 +684,7 @@ function renderMyVotes(){
 // Official = cast on a house the host opened in a group. Phone-only mode has no groups, so every vote counts.
 const isCancelled=v=>CLOUD&&!!v.callId&&Cloud.cancelled.has(v.callId);
 const isOfficial=v=>!CLOUD||(!!v.callId&&!isCancelled(v));
-const MIN_JUDGES=LUTH_CONFIG.MIN_JUDGES||3;
+const MIN_JUDGES=QUORUM_CONFIG.MIN_JUDGES||3;
 // Houses per category, best average first. Official votes only unless includeAll.
 function rankings(includeAll){
   const groups={};
@@ -734,7 +736,7 @@ function renderExport(){
   const votes=getVotes();
   $('export-count').textContent=votes.length;
   $('export-houses').textContent=new Set(votes.map(v=>v.address)).size;
-  const meta=window.LUTH_ADDRESSES||{};
+  const meta=window.QUORUM_ADDRESSES||{};
   const n=Object.values(DATA).reduce((a,l)=>a+l.length,0);
   $('data-source').textContent=meta.generatedAt
     ?`${n} houses imported ${new Date(meta.generatedAt).toLocaleDateString()} from ${meta.source}.`
@@ -747,11 +749,11 @@ function exportCSV(){
   const rows=votes.map(v=>headers.map(h=>cell(h==='hasPhoto'?(v.photo||v.hasPhoto?'yes':'no'):h==='official'?(isOfficial(v)?'yes':'no'):v[h])).join(','));
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([[headers.join(','),...rows].join('\n')],{type:'text/csv'}));
-  a.download=`luth_votes_${CLOUD?'all_judges':judgeId}_${new Date().toISOString().slice(0,10)}.csv`;a.click();
+  a.download=`quorum_votes_${CLOUD?'all_judges':judgeId}_${new Date().toISOString().slice(0,10)}.csv`;a.click();
 }
 function clearAll(){
   if(!confirm('Delete ALL votes, skips, and added houses on this device? This cannot be undone.'))return;
-  ['luth_votes','luth_skips','luth_extra_houses'].forEach(k=>localStorage.removeItem(k));
+  ['quorum_votes','quorum_skips','quorum_extra_houses'].forEach(k=>localStorage.removeItem(k));
   renderAll();toast('Cleared');
 }
 
@@ -762,7 +764,7 @@ function renderSessionCard(){
   const off=Cloud.online?'':'<span class="offline">Offline · will sync</span>';
   if(!Cloud.sessionCode){
     refreshGroups();
-    const last=store.get('luth_last_session_obj',null);
+    const last=store.get('quorum_last_session_obj',null);
     const groups=activeGroups||[];
     const rejoin=last&&groups.find(g=>g.code===last.code);
     const others=groups.filter(g=>g!==rejoin);
@@ -888,7 +890,7 @@ function renderCallbar(){
 }
 function goToCall(){
   const c=Cloud.session&&Cloud.session.current;if(!c)return;
-  if(!housesOn(c.street).all.includes(c.num)){const ex=getExtras();(ex[c.street]=ex[c.street]||[]).push(c.num);store.set('luth_extra_houses',ex);}
+  if(!housesOn(c.street).all.includes(c.num)){const ex=getExtras();(ex[c.street]=ex[c.street]||[]).push(c.num);store.set('quorum_extra_houses',ex);}
   openStreet(c.street);openSheet(c.num);
 }
 let lastCallId=null,openCall=null;
@@ -942,12 +944,12 @@ async function joinSession(code){
 }
 function invite(){
   const url=location.href.split(/[?#]/)[0]+'?join='+Cloud.sessionCode;
-  if(navigator.share)navigator.share({title:'Judge Light Up the Hood',text:'Join judging session '+Cloud.sessionCode,url}).catch(()=>{});
+  if(navigator.share)navigator.share({title:'Judge the '+QUORUM_CONFIG.EVENT_NAME,text:'Join my judging group on Quorum (code '+Cloud.sessionCode+')',url}).catch(()=>{});
   else navigator.clipboard.writeText(url).then(()=>toast('Invite link copied'),()=>prompt('Copy this link',url));
 }
 // Remember the group so a judge who leaves by mistake gets a one-tap Rejoin.
 function rememberGroup(){
-  setTimeout(()=>{if(Cloud.sessionCode)store.set('luth_last_session_obj',{code:Cloud.sessionCode,hostName:(Cloud.session&&Cloud.session.hostName)||''});},1500);
+  setTimeout(()=>{if(Cloud.sessionCode)store.set('quorum_last_session_obj',{code:Cloud.sessionCode,hostName:(Cloud.session&&Cloud.session.hostName)||''});},1500);
 }
 function leaveSession(){
   const msg=Cloud.isHost()
@@ -1024,7 +1026,7 @@ async function zipPhotos(winnersOnly){
   toast(`Preparing ${list.length} photo${list.length>1?'s':''}...`);
   const files=[];
   for(const it of list){const d=await photoData(it.vote).catch(()=>null);if(d)files.push({name:it.name,data:dataUrlBytes(d)});}
-  downloadBlob(makeZip(files),`light-up-the-hood-${LUTH_CONFIG.YEAR}-${winnersOnly?'winners':'all'}-photos.zip`);
+  downloadBlob(makeZip(files),`${fileSafe(QUORUM_CONFIG.EVENT_NAME).toLowerCase()}-${QUORUM_CONFIG.YEAR}-${winnersOnly?'winners':'all'}-photos.zip`);
 }
 
 // ---------- Navigation ----------
@@ -1082,8 +1084,10 @@ $('viewer').addEventListener('touchstart',e=>{swipeX=e.touches[0].clientX;},{pas
 $('viewer').addEventListener('touchend',e=>{if(swipeX==null)return;const dx=e.changedTouches[0].clientX-swipeX;swipeX=null;if(Math.abs(dx)>50)stepViewer(dx<0?1:-1);});
 
 // ---------- Boot ----------
+if(QUORUM_CONFIG.EVENT_NAME){$('event-name').textContent=QUORUM_CONFIG.EVENT_NAME;document.title='Quorum · '+QUORUM_CONFIG.EVENT_NAME;}
+if(QUORUM_CONFIG.EVENT_PLACE)$('event-place').textContent=QUORUM_CONFIG.EVENT_PLACE;
 function showIdentity(){
-  const name=store.get('luth_judge_name','');
+  const name=store.get('quorum_judge_name','');
   const label=name||(judgeId?'Judge '+judgeId.slice(0,6).toUpperCase():'Connecting...');
   $('judge-badge').textContent=label;$('judge-id-display').textContent=label;
 }
@@ -1095,7 +1099,7 @@ if(CLOUD){
   Cloud.onChange(kind=>{
     if(kind==='error')toast('Sync problem. Votes are saved and will retry.');
     if(kind==='session-missing')toast('That group no longer exists');
-    if(kind==='ended'){lastCallId=null;openCall=null;closeSheet();store.set('luth_last_session_obj',null);activeGroups=null;refreshGroups(true);toast('The judging group has ended');}
+    if(kind==='ended'){lastCallId=null;openCall=null;closeSheet();store.set('quorum_last_session_obj',null);activeGroups=null;refreshGroups(true);toast('The judging group has ended');}
     if(kind==='removed'){lastCallId=null;openCall=null;closeSheet();toast('The host removed you from the group. You can rejoin from the Streets screen.');}
     if(kind==='session'||kind==='judges')onSessionUpdate();
     renderAll();
@@ -1116,7 +1120,7 @@ renderStreets();renderSessionCard();
   openStreet(street);
   const num=p.get('num');
   if(num){
-    if(!housesOn(street).all.includes(num)){const ex=getExtras();(ex[street]=ex[street]||[]).push(num);store.set('luth_extra_houses',ex);renderStreet();}
+    if(!housesOn(street).all.includes(num)){const ex=getExtras();(ex[street]=ex[street]||[]).push(num);store.set('quorum_extra_houses',ex);renderStreet();}
     openSheet(num,CATS[p.get('cat')]?p.get('cat'):null);
   }
 })();

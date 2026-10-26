@@ -1,14 +1,16 @@
-# Light Up the Hood
+# Quorum
 
-A mobile web app for judging a neighborhood holiday-lights contest, street by street. Judges walk the neighborhood together. A host opens voting on one house at a time. Every judge's phone jumps to that house, scores sync live, and the standings count only votes that pass a server-enforced audit.
+**Organized judging for loosely organized groups.** Quorum is a mobile web app for host-led group judging. A host opens voting on one entry at a time. Every judge's phone jumps to that entry with the same category and criteria, scores sync live, and the results count only votes that pass a server-enforced audit.
+
+Its first event is the **Bellevue Holiday Lights Competition** in Richmond, Virginia, where judges walk the neighborhood and score houses street by street.
 
 **[Open the live app →](https://thedonkinator.github.io/light-up-the-hood/)**
 
-![Street view, host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
+![The judging group, a street by block, the host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
 
 ## The problem
 
-The Bellevue neighborhood in Richmond, Virginia runs a yearly holiday-lights contest with four categories. A panel of judges goes street by street, and every house has to be scored by the same people, in the same category, on the same scale. The first version of this app ran into three problems:
+The Bellevue neighborhood in Richmond, Virginia runs a yearly holiday lights competition with four categories. A panel of volunteer judges goes street by street, and every house has to be scored by the same people, in the same category, on the same scale. The first version of this app ran into three problems:
 
 - **Wrong house numbers.** It generated numbers from guessed ranges, so judges were shown houses that don't exist and missed ones that do.
 - **No coordination.** Each judge picked houses and categories alone, so scores didn't line up.
@@ -95,10 +97,14 @@ The emulators need Java.
 | `index.html` | The app: screens, scoring, sessions, standings, photo viewer, export |
 | `sync.js` | Firestore sync: votes, photos, groups, host controls |
 | `firestore.rules` | Server-side permissions and vote audit |
-| `streets.config.js` | Contest streets, boundary sides, year, and judge minimum |
+| `streets.config.js` | Event settings: name, streets, boundary sides, year, and judge minimum |
 | `addresses.js` | Generated house list (do not edit by hand) |
 | `scripts/` | Address importer and Firebase SDK bundler |
 | `tests/` | End-to-end tests and the emulator test server |
+
+## What's next
+
+The judging protocol isn't specific to holiday lights: a host controls what's being judged, everyone scores the same entry on the same criteria, mistakes can be undone, and only audited votes count. The next step is moving the event layer (entries, categories, scoring criteria, judge minimum) out of code and into an organizer setup screen, so any competition can run on Quorum. That comes with organizer roles, invite-only judges, and results that stay hidden until the organizer publishes them.
 
 ## Tech
 

@@ -1,10 +1,10 @@
 {
-  "name": "light-up-the-hood",
+  "name": "quorum",
   "private": true,
   "scripts": {
     "build:addresses": "node scripts/build-addresses.mjs",
     "build:firebase": "node scripts/build-firebase.mjs",
-    "test": "firebase emulators:exec --only auth,firestore --project demo-luth \"node --test tests/e2e.test.mjs\"",
+    "test": "firebase emulators:exec --only auth,firestore --project demo-quorum \"node --test tests/e2e.test.mjs\"",
     "test:quick": "node --test tests/e2e.test.mjs"
   },
   "devDependencies": {

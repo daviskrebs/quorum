@@ -1,7 +1,7 @@
 // Firebase project settings (Project settings → Your apps → Web app → firebaseConfig).
 // These values are public by design; firestore.rules controls who can read and write.
 // Set to null to run without sync: votes then stay on each phone.
-window.LUTH_FIREBASE = {
+window.QUORUM_FIREBASE = {
   apiKey: 'AIzaSyDI-JJRwRDp8BE1Myz1xHtqu2s2YaHk1dg',
   authDomain: 'light-up-the-hood.firebaseapp.com',
   projectId: 'light-up-the-hood',

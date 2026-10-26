@@ -6,7 +6,7 @@ import { extname, join, normalize } from 'node:path';
 
 const ROOT = new URL('..', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-const EMULATOR_CONFIG = `window.LUTH_FIREBASE = { apiKey: 'demo-key', authDomain: 'demo-luth.firebaseapp.com', projectId: 'demo-luth', useEmulator: true };`;
+const EMULATOR_CONFIG = `window.QUORUM_FIREBASE = { apiKey: 'demo-key', authDomain: 'demo-quorum.firebaseapp.com', projectId: 'demo-quorum', useEmulator: true };`;
 
 export function startServer(port = 8765) {
   const server = createServer(async (req, res) => {

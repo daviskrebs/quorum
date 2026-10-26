@@ -7,20 +7,20 @@
 //   sessions/{CODE}/judges/{uid}  name, doneCallId (last called house they finished)
 // Firestore's offline cache queues writes when a phone loses signal.
 (function () {
-  const cfg = window.LUTH_FIREBASE;
+  const cfg = window.QUORUM_FIREBASE;
   const listeners = new Set();
   const emit = kind => listeners.forEach(fn => { try { fn(kind); } catch (e) { console.error(e); } });
 
   const Cloud = {
-    enabled: !!(cfg && window.LUTH_FB),
+    enabled: !!(cfg && window.QUORUM_FB),
     uid: null, votes: [], cancelled: new Set(), session: null, sessionCode: null, judges: [], online: navigator.onLine,
     onChange(fn) { listeners.add(fn); },
   };
   window.Cloud = Cloud;
   if (!Cloud.enabled) return;
 
-  const F = window.LUTH_FB;
-  const year = String(LUTH_CONFIG.YEAR);
+  const F = window.QUORUM_FB;
+  const year = String(QUORUM_CONFIG.YEAR);
   const app = F.initializeApp(cfg);
   const auth = F.getAuth(app);
   let db;
@@ -62,7 +62,7 @@
       Cloud.cancelled = new Set(snap.docs.flatMap(d => d.data().cancelled || []));
       emit('votes');
     }, err => console.error(err));
-    const saved = localStorage.getItem('luth_session');
+    const saved = localStorage.getItem('quorum_session');
     if (saved) watchSession(saved);
   });
 
@@ -105,7 +105,7 @@
   function watchSession(code) {
     stopWatching();
     Cloud.sessionCode = code;
-    localStorage.setItem('luth_session', code);
+    localStorage.setItem('quorum_session', code);
     unsubSession = F.onSnapshot(ref('sessions', code), snap => {
       if (!snap.exists()) { Cloud.leaveSession(); emit('session-missing'); return; }
       if (snap.data().status === 'ended') { dropOut(); emit('ended'); emit('session'); return; }
@@ -123,7 +123,7 @@
   }
   // Leave locally without touching the server (group ended, or we were removed).
   function dropOut() {
-    stopWatching(); Cloud.sessionCode = null; localStorage.removeItem('luth_session');
+    stopWatching(); Cloud.sessionCode = null; localStorage.removeItem('quorum_session');
   }
   function stopWatching() {
     unsubSession && unsubSession();
@@ -180,7 +180,7 @@
     if (code && Cloud.uid) F.deleteDoc(ref('sessions', code, 'judges', Cloud.uid)).catch(() => {});
     stopWatching();
     Cloud.sessionCode = null;
-    localStorage.removeItem('luth_session');
+    localStorage.removeItem('quorum_session');
     emit('session');
   };
   // Host only: take a judge out of the session (left early, phone died). Their votes stay.

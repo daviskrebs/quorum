@@ -1,38 +1,109 @@
 # Light Up the Hood
 
-Judging app for the Bellevue (Richmond, VA) holiday lights contest. Judges pick a street, walk it, and score each house.
+A mobile web app for judging a neighborhood holiday-lights contest, street by street. Judges walk the neighborhood together. A host opens voting on one house at a time. Every judge's phone jumps to that house, scores sync live, and the standings count only votes that pass a server-enforced audit.
 
-## Files
-- `index.html`: the app (works offline once loaded; "Add to Home Screen" on iPhone for a full-screen app)
-- `streets.config.js`: the streets in the contest, with optional number ranges for long boundary streets
-- `addresses.js`: real house numbers per street. **Generated**, do not hand-edit
-- `scripts/build-addresses.mjs`: builds `addresses.js` from City of Richmond address points
+**[Open the live app →](https://thedonkinator.github.io/light-up-the-hood/)**
 
-## Load real house numbers
-```sh
-npm run build:addresses                   # fetches Richmond GIS (NODE_USE_ENV_PROXY=1 behind a proxy)
-node scripts/build-addresses.mjs --file x.json   # or use a downloaded GeoJSON / Esri JSON export
+![Street view, host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
+
+## The problem
+
+The Bellevue neighborhood in Richmond, Virginia runs a yearly holiday-lights contest with four categories. A panel of judges goes street by street, and every house has to be scored by the same people, in the same category, on the same scale. The first version of this app ran into three problems:
+
+- **Wrong house numbers.** It generated numbers from guessed ranges, so judges were shown houses that don't exist and missed ones that do.
+- **No coordination.** Each judge picked houses and categories alone, so scores didn't line up.
+- **No way to combine votes.** Votes lived on each phone and had to be emailed around as spreadsheets.
+
+## What it does
+
+- **Real addresses, organized like the street.** Houses come from the City of Richmond's official address records. They're grouped by block, with odd and even sides side by side, the way you'd walk the street.
+- **Host-led rounds.** The host picks a house and its category, then opens voting. Every judge's phone opens to that house with the category locked. The host sees who has scored, who skipped, and who's still deciding, and closes voting when everyone's done.
+- **Built for a real night out.** Judges can join late, leave, and rejoin in one tap. The host can hand off the role, or a judge can take over if the host's phone dies. A house opened by mistake can be cancelled. Phones that lose signal keep working and catch up when they reconnect.
+- **Audited results.** A vote counts only if it was cast in a group on a house the host opened, and a house places only after three judges have scored it. Everything else is listed under "Not counted," so the results can be checked.
+- **Photos and export.** Judges can attach a photo to each vote. Photos open full size, and the winners' photos download as a single .zip. All votes export to CSV, including audit fields.
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph Phones["Judges' phones (static site on GitHub Pages)"]
+    H[Host] -- "open / close / cancel a house" --> S
+    J1[Judge] -- "official vote + photo" --> V
+    J2[Judge] -- "official vote + photo" --> V
+  end
+  subgraph Firebase["Firebase (anonymous auth + Firestore)"]
+    S[(sessions/CODE<br/>current house, category, judges)]
+    V[(votes / photos)]
+    R{{Security rules}}
+  end
+  S -- "live updates" --> J1 & J2
+  V -- "live standings" --> H & J1 & J2
+  R -. "checks every write" .- S & V
+  GIS[(City of Richmond<br/>address points)] -- "build-time import" --> A[addresses.js]
+  A --> Phones
 ```
-It traces the neighborhood outline from the four boundary streets (`edge:` in `streets.config.js`) and keeps only addresses inside it. It prints a count per street; check them before committing.
 
-Houses the data misses can be added in the app ("House not listed?"). They're saved on that judge's device.
+- **No build step for the app.** `index.html` is plain HTML, CSS, and JavaScript. The Firebase SDK is bundled once into `vendor/firebase.js`. GitHub Pages serves the files as they are.
+- **Firestore with an offline cache.** Writes apply on the phone immediately and sync in the background, and live listeners push votes, standings, and the current house to every phone.
+- **Anonymous sign-in.** Judges never create accounts. Each phone gets a stable anonymous identity, which the security rules use to decide who can write what.
 
-## Judging flow
-Streets → pick a street → houses shown odd side / even side → tap a house → score → **Save & next house** moves to the next unjudged house. **No display · skip** marks a house as reviewed. Each street shows progress.
+## Engineering highlights
 
-## Live sync (Firebase)
-With `firebase.config.js` filled in, votes and photos sync to Firestore under `contests/{YEAR}`. Standings are live for every judge, and phones that lose signal catch up when they reconnect. With it set to `null`, votes stay on each phone and judges export CSVs.
+**Address data from city GIS** ([`scripts/build-addresses.mjs`](scripts/build-addresses.mjs))
+- The importer queries Richmond's ArcGIS address layer for the neighborhood's streets. It drops apartment units and handles half addresses (`1313½`) and letter suffixes, without mistaking street directions like the "W" in "1205 W Laburnum Ave" for suffixes.
+- Instead of hand-entered number ranges, it traces the neighborhood outline from the address points of the four boundary streets and keeps only points inside it.
+- On boundary streets only the Bellevue side is judged. The importer works out whether that side is the odd or even numbers by comparing the map coordinates of neighboring houses. Every pair agreed.
+- Result: 1,243 houses on 27 streets, including 10 streets the original hand-made list had missed.
 
-**Judging sessions:** one person taps **Start session** and shares the 4-letter code or invite link. When the host opens a house and taps **Open voting**, every judge's phone jumps to that house. The host sees who has scored, skipped, or is still deciding, and taps **Close voting** when everyone is done (saving their own vote does not close it). After voting, phones return to the street's house list.
+**Votes the database can vouch for** ([`firestore.rules`](firestore.rules))
+- A vote is official only if it carries the group code and the ID of the house the host opened. The rules accept it only while that exact house is open, in the host's category, from a judge in the group.
+- Official votes lock when voting closes. Votes from a cancelled opening are voided and can be re-cast.
+- Only the host can open or close houses. A judge can take over hosting, but that write can't touch anything else. Ended groups can't be reopened.
+- Standings apply the 3-judge minimum on top. The CSV keeps `official`, `sessionCode`, and `callId` for each vote.
 
-**Ending a round:** the host taps **End judging group** (it asks first). Everyone leaves the group and it can't be reopened. Judges who leave by mistake get a one-tap **Rejoin**, and active groups are listed on the Streets screen.
+**Photos within Firestore's limits**
+- Photos are resized on the phone to 1,600 px. JPEG quality steps down only as far as needed to stay under Firestore's 1 MB document limit, which keeps the project on the free plan without Cloud Storage.
+- The .zip download is built in the browser by a small dependency-free zip writer (stored entries plus CRC-32).
 
-**What counts:** only votes cast in a group on a house the host opened, in the category the host picked. A house places once `MIN_JUDGES` (3) judges have scored it. Standings list everything else under **Not counted**, and the CSV has `official`, `sessionCode`, and `callId` columns for auditing. The rules enforce this: official votes can only be written while their house is open, and are locked once it closes.
+## Tests
 
-**Setup:** paste `firestore.rules` into Firebase console → Firestore → Rules → Publish. Re-paste it whenever it changes.
+```sh
+npm install
+npm test          # starts the Firebase emulators, then runs the end-to-end suite
+```
 
-**Each year:** bump `YEAR` in `streets.config.js` and rerun the address import.
+[`tests/e2e.test.mjs`](tests/e2e.test.mjs) drives several simulated phones with Playwright against the local Firebase emulators, using the real security rules. It covers:
 
-**Local testing:** `npx firebase-tools emulators:start --project demo-luth --only auth,firestore`, then set `useEmulator: true` and `projectId: 'demo-luth'` in a local copy of the config.
+- Live rounds: the host's category locks on judges' phones, and the host panel shows each judge's status.
+- One open house at a time.
+- The 3-judge minimum and the "Not counted" audit list.
+- Locked votes after close, and the rules rejecting forged, impersonated, and out-of-range writes.
+- Cancelling a house opened by mistake and re-voting.
+- Leaving and rejoining in one tap, and ending a group.
+- Handing off and taking over hosting.
 
-`vendor/firebase.js` is the bundled Firebase SDK (`npm install && npm run build:firebase` to rebuild).
+The emulators need Java.
+
+## Run it yourself
+
+1. Serve the folder with any static server, for example `npx serve .`.
+2. To sync between phones, create a Firebase project. Turn on **Anonymous** sign-in and **Firestore**, paste the web app config into [`firebase.config.js`](firebase.config.js), and publish [`firestore.rules`](firestore.rules). With the config set to `null`, the app runs on a single phone and exports CSVs.
+3. To refresh the address list for a new year, run `npm run build:addresses`, then bump `YEAR` and `PHONE_DATA_VERSION` in [`streets.config.js`](streets.config.js).
+
+| Path | What it is |
+|---|---|
+| `index.html` | The app: screens, scoring, sessions, standings, photo viewer, export |
+| `sync.js` | Firestore sync: votes, photos, groups, host controls |
+| `firestore.rules` | Server-side permissions and vote audit |
+| `streets.config.js` | Contest streets, boundary sides, year, and judge minimum |
+| `addresses.js` | Generated house list (do not edit by hand) |
+| `scripts/` | Address importer and Firebase SDK bundler |
+| `tests/` | End-to-end tests and the emulator test server |
+
+## Tech
+
+HTML, CSS, and JavaScript with no framework · Firebase Authentication and Cloud Firestore · ArcGIS REST · GitHub Pages · Playwright and Node's test runner · esbuild (SDK bundle only)
+
+## Credits
+
+Built by [@thedonkinator](https://github.com/thedonkinator), with [Claude Code](https://claude.com/claude-code) as a pair programmer. Address data: City of Richmond, VA.

@@ -3,10 +3,14 @@
   "private": true,
   "scripts": {
     "build:addresses": "node scripts/build-addresses.mjs",
-    "build:firebase": "node scripts/build-firebase.mjs"
+    "build:firebase": "node scripts/build-firebase.mjs",
+    "test": "firebase emulators:exec --only auth,firestore --project demo-luth \"node --test tests/e2e.test.mjs\"",
+    "test:quick": "node --test tests/e2e.test.mjs"
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "firebase": "^11.10.0"
+    "firebase": "^11.10.0",
+    "firebase-tools": "^15.34.0",
+    "playwright": "^1.56.1"
   }
 }

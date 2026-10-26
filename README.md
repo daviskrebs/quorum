@@ -4,7 +4,7 @@
 
 Its first event is the **Bellevue Holiday Lights Competition** in Richmond, Virginia, where judges walk the neighborhood and score houses street by street.
 
-**[Open the live app →](https://thedonkinator.github.io/light-up-the-hood/)**
+**[Open the live app →](https://daviskrebs.github.io/quorum/)**
 
 ![The judging group, a street by block, the host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
 
@@ -112,4 +112,4 @@ HTML, CSS, and JavaScript with no framework · Firebase Authentication and Cloud
 
 ## Credits
 
-Built by [@thedonkinator](https://github.com/thedonkinator), with [Claude Code](https://claude.com/claude-code) as a pair programmer. Address data: City of Richmond, VA.
+Built by [@daviskrebs](https://github.com/daviskrebs), with [Claude Code](https://claude.com/claude-code) as a pair programmer. Address data: City of Richmond, VA.

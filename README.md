@@ -4,7 +4,7 @@
 
 Start a preset event, join one in progress, or create your own: any judged competition with entries, categories, and things to score. The first preset is the **Bellevue Holiday Lights Competition** in Richmond, Virginia, where judges walk the neighborhood and score houses street by street.
 
-**[Open the live app →](https://daviskrebs.github.io/quorum/)**
+**[Open the live app →](https://daviskrebs.github.io/tally/)**
 
 ![The landing page, a street by block, the host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
 

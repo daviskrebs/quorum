@@ -1,12 +1,12 @@
-# Quorum
+# Tally
 
-**Organized judging for loosely organized groups.** Quorum is a mobile web app for host-led group judging. A host opens voting on one entry at a time. Every judge's phone jumps to that entry with the same category and criteria, scores sync live, and the results count only votes that pass a server-enforced audit.
+**Organized judging for loosely organized groups.** Tally is a mobile web app for host-led group judging. A host opens voting on one entry at a time. Every judge's phone jumps to that entry with the same category and criteria, scores sync live, and the results count only votes that pass a server-enforced audit.
 
-Its first event is the **Bellevue Holiday Lights Competition** in Richmond, Virginia, where judges walk the neighborhood and score houses street by street.
+Start a preset event, join one in progress, or create your own: any judged competition with entries, categories, and things to score. The first preset is the **Bellevue Holiday Lights Competition** in Richmond, Virginia, where judges walk the neighborhood and score houses street by street.
 
 **[Open the live app →](https://daviskrebs.github.io/quorum/)**
 
-![The judging group, a street by block, the host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
+![The landing page, a street by block, the host's live voting panel, a judge's score sheet, and the standings](docs/screenshots/hero.png)
 
 ## The problem
 
@@ -18,6 +18,7 @@ The Bellevue neighborhood in Richmond, Virginia runs a yearly holiday lights com
 
 ## What it does
 
+- **Any event.** The landing page lists events in progress and presets, and has a form for creating a new event: entries (optionally grouped into sections), categories, scoring criteria, and how many judges an entry needs. Each event gets a six-letter code and a share link.
 - **Real addresses, organized like the street.** Houses come from the City of Richmond's official address records. They're grouped by block, with odd and even sides side by side, the way you'd walk the street.
 - **Host-led rounds.** The host picks a house and its category, then opens voting. Every judge's phone opens to that house with the category locked. The host sees who has scored, who skipped, and who's still deciding, and closes voting when everyone's done.
 - **Built for a real night out.** Judges can join late, leave, and rejoin in one tap. The host can hand off the role, or a judge can take over if the host's phone dies. A house opened by mistake can be cancelled. Phones that lose signal keep working and catch up when they reconnect.
@@ -29,23 +30,26 @@ The Bellevue neighborhood in Richmond, Virginia runs a yearly holiday lights com
 ```mermaid
 flowchart LR
   subgraph Phones["Judges' phones (static site on GitHub Pages)"]
-    H[Host] -- "open / close / cancel a house" --> S
+    H[Host] -- "open / close / cancel an entry" --> S
     J1[Judge] -- "official vote + photo" --> V
     J2[Judge] -- "official vote + photo" --> V
   end
   subgraph Firebase["Firebase (anonymous auth + Firestore)"]
-    S[(sessions/CODE<br/>current house, category, judges)]
+    E[(events/CODE<br/>entries, categories, criteria)]
+    S[(sessions/CODE<br/>current entry, category, judges)]
     V[(votes / photos)]
     R{{Security rules}}
   end
   S -- "live updates" --> J1 & J2
   V -- "live standings" --> H & J1 & J2
-  R -. "checks every write" .- S & V
-  GIS[(City of Richmond<br/>address points)] -- "build-time import" --> A[addresses.js]
+  E -- "defines" --> S & V
+  R -. "checks every write" .- E & S & V
+  GIS[(City of Richmond<br/>address points)] -- "build-time import" --> A[Bellevue preset]
   A --> Phones
 ```
 
-- **No build step for the app.** `index.html` is plain HTML, CSS, and JavaScript. The Firebase SDK is bundled once into `vendor/firebase.js`. GitHub Pages serves the files as they are.
+- **Events as data.** An event record holds the layout, wording, categories, criteria, entries, and judge minimum. Groups, votes, and photos live under their event, and the judging app reads everything from the event it's opened on. Presets keep large entry lists (like Bellevue's 1,243 houses) in code, so their event records stay small.
+- **No build step for the app.** The app is plain HTML, CSS, and JavaScript. The Firebase SDK is bundled once into `vendor/firebase.js`. GitHub Pages serves the files as they are.
 - **Firestore with an offline cache.** Writes apply on the phone immediately and sync in the background, and live listeners push votes, standings, and the current house to every phone.
 - **Anonymous sign-in.** Judges never create accounts. Each phone gets a stable anonymous identity, which the security rules use to decide who can write what.
 
@@ -58,9 +62,10 @@ flowchart LR
 - Result: 1,243 houses on 27 streets, including 10 streets the original hand-made list had missed.
 
 **Votes the database can vouch for** ([`firestore.rules`](firestore.rules))
+- Scores are checked against the vote's own event: the category must be one of the event's categories, and every score must be 1 to 5 stars for a criterion the event defines.
 - A vote is official only if it carries the group code and the ID of the house the host opened. The rules accept it only while that exact house is open, in the host's category, from a judge in the group.
 - Official votes lock when voting closes. Votes from a cancelled opening are voided and can be re-cast.
-- Only the host can open or close houses. A judge can take over hosting, but that write can't touch anything else. Ended groups can't be reopened.
+- Only the host can open or close entries, and only an event's organizer can end it. A judge can take over hosting, but that write can't touch anything else. Ended groups can't be reopened.
 - Standings apply the 3-judge minimum on top. The CSV keeps `official`, `sessionCode`, and `callId` for each vote.
 
 **Photos within Firestore's limits**
@@ -76,10 +81,12 @@ npm test          # starts the Firebase emulators, then runs the end-to-end suit
 
 [`tests/e2e.test.mjs`](tests/e2e.test.mjs) drives several simulated phones with Playwright against the local Firebase emulators, using the real security rules. It covers:
 
+- The landing page: events in progress, joining by code, and a warning before starting a second copy of a preset.
+- A new event created from the form, judged on its own entries, categories, and criteria, then ended by its organizer.
 - Live rounds: the host's category locks on judges' phones, and the host panel shows each judge's status.
 - One open house at a time.
 - The 3-judge minimum and the "Not counted" audit list.
-- Locked votes after close, and the rules rejecting forged, impersonated, and out-of-range writes.
+- Locked votes after close, and the rules rejecting forged, impersonated, and out-of-range writes, scores for criteria the event doesn't have, and ending someone else's event.
 - Cancelling a house opened by mistake and re-voting.
 - Leaving and rejoining in one tap, and ending a group.
 - Handing off and taking over hosting.
@@ -90,21 +97,27 @@ The emulators need Java.
 
 1. Serve the folder with any static server, for example `npx serve .`.
 2. To sync between phones, create a Firebase project. Turn on **Anonymous** sign-in and **Firestore**, paste the web app config into [`firebase.config.js`](firebase.config.js), and publish [`firestore.rules`](firestore.rules). With the config set to `null`, the app runs on a single phone and exports CSVs.
-3. To refresh the address list for a new year, run `npm run build:addresses`, then bump `YEAR` and `PHONE_DATA_VERSION` in [`streets.config.js`](streets.config.js).
+3. To refresh Bellevue's address list, run `npm run build:addresses`. To clear test data off every phone before a real event, bump `PHONE_DATA_VERSION` in [`landing.js`](landing.js).
+4. To add a preset, add it to [`templates.js`](templates.js). The file describes the event shape.
 
 | Path | What it is |
 |---|---|
-| `index.html` | The app: screens, scoring, sessions, standings, photo viewer, export |
-| `sync.js` | Firestore sync: votes, photos, groups, host controls |
+| `index.html` | Markup and styles for the landing page and the judging app |
+| `landing.js` | Landing page: events in progress, presets, create-an-event form; loads an event |
+| `app.js` | The judging app for one event: sections, scoring, groups, standings, photos, export |
+| `sync.js` | Firestore sync: events, votes, photos, groups, host controls |
 | `firestore.rules` | Server-side permissions and vote audit |
-| `streets.config.js` | Event settings: name, streets, boundary sides, year, and judge minimum |
-| `addresses.js` | Generated house list (do not edit by hand) |
+| `templates.js` | Preset events |
+| `templates/bellevue/` | Bellevue's streets, boundary sides, and generated house list |
 | `scripts/` | Address importer and Firebase SDK bundler |
 | `tests/` | End-to-end tests and the emulator test server |
 
 ## What's next
 
-The judging protocol isn't specific to holiday lights: a host controls what's being judged, everyone scores the same entry on the same criteria, mistakes can be undone, and only audited votes count. The next step is moving the event layer (entries, categories, scoring criteria, judge minimum) out of code and into an organizer setup screen, so any competition can run on Quorum. That comes with organizer roles, invite-only judges, and results that stay hidden until the organizer publishes them.
+- **Editing an event** after it's created (entries, categories, criteria).
+- **Invite-only judges**, with an organizer approving who can vote.
+- **Results hidden until published**, so standings don't sway judges mid-event.
+- **Criteria per category** for created events (presets already support this, e.g. Bellevue's Unique Design applies only to Anything Goes).
 
 ## Tech
 

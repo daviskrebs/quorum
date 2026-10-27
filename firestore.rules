@@ -1,75 +1,94 @@
 rules_version = '2';
 // Paste into Firebase console → Firestore → Rules, then Publish.
-// Every phone signs in anonymously. A judge can only write their own votes and photos,
-// and only the session host can change which house is being judged.
+// Every phone signs in anonymously. Anyone signed in can create an event; its creator
+// is the organizer. A judge can only write their own votes and photos, and only a
+// group's host can change which entry is being judged.
 //
-// Official votes (the ones that count) carry the sessionCode and callId of a house the
-// host opened. They can only be written while that exact house is open, by a judge in
+// Official votes (the ones that count) carry the sessionCode and callId of an entry the
+// host opened. They can only be written while that exact entry is open, by a judge in
 // that group, in the category the host picked, and are locked once voting closes.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function mine(id) { return id.matches(request.auth.uid + '__.+'); }
-    function star(v) { return v is int && v >= 1 && v <= 5; }
-    function sessionPath(year, code) { return /databases/$(database)/documents/contests/$(year)/sessions/$(code); }
-    function inGroup(year, code) {
-      return exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.auth.uid));
-    }
-    // An official vote must match the house currently open in its group.
-    function officialOk(year, v) {
-      return v.get('callId', null) == null || (
-        get(sessionPath(year, v.sessionCode)).data.current.callId == v.callId
-        && get(sessionPath(year, v.sessionCode)).data.current.cat == v.category
-        && inGroup(year, v.sessionCode));
-    }
-    // An existing official vote can only change while its house is still open,
-    // or if the host cancelled that call (opened the wrong house).
-    function unlocked(year, old) {
-      return old.get('callId', null) == null
-        || old.callId in get(sessionPath(year, old.sessionCode)).data.get('cancelled', [])
-        || get(sessionPath(year, old.sessionCode)).data.current.callId == old.callId;
-    }
-    function validVote(v) {
-      return v.judgeId == request.auth.uid
-        && v.category in ['wonderful', 'anything', 'tree', 'doors']
-        && star(v.curbAppeal) && star(v.overallPresentation)
-        && (v.uniqueDesign == null || star(v.uniqueDesign))
-        && v.notes.size() <= 2000;
-    }
 
-    match /contests/{year} {
+    match /events/{eventId} {
+      function eventDoc() { return get(/databases/$(database)/documents/events/$(eventId)).data; }
+      function validEvent(e) {
+        return e.name is string && e.name.size() > 0 && e.name.size() <= 120
+          && e.categoryKeys is list && e.categoryKeys.size() > 0 && e.categoryKeys.size() <= 20
+          && e.criteriaKeys is list && e.criteriaKeys.size() > 0 && e.criteriaKeys.size() <= 10
+          && e.minJudges is int && e.minJudges >= 1 && e.minJudges <= 50
+          && e.status in ['active', 'ended'];
+      }
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status == 'active' && validEvent(request.resource.data);
+      // Only the organizer can change the event (for now: end it). The organizer can't be reassigned.
+      allow update: if signedIn() && resource.data.createdBy == request.auth.uid
+        && request.resource.data.createdBy == resource.data.createdBy && validEvent(request.resource.data);
+
+      function mine(id) { return id.matches(request.auth.uid + '__.+'); }
+      function sessionPath(code) { return /databases/$(database)/documents/events/$(eventId)/sessions/$(code); }
+      function inGroup(code) {
+        return exists(/databases/$(database)/documents/events/$(eventId)/sessions/$(code)/judges/$(request.auth.uid));
+      }
+      // An official vote must match the entry currently open in its group.
+      function officialOk(v) {
+        return v.get('callId', null) == null || (
+          get(sessionPath(v.sessionCode)).data.current.callId == v.callId
+          && get(sessionPath(v.sessionCode)).data.current.cat == v.category
+          && inGroup(v.sessionCode));
+      }
+      // An existing official vote can only change while its entry is still open,
+      // or if the host cancelled that call (opened the wrong entry).
+      function unlocked(old) {
+        return old.get('callId', null) == null
+          || old.callId in get(sessionPath(old.sessionCode)).data.get('cancelled', [])
+          || get(sessionPath(old.sessionCode)).data.current.callId == old.callId;
+      }
+      // Scores: one to five stars for criteria this event defines.
+      function validVote(v) {
+        return v.judgeId == request.auth.uid
+          && v.category in eventDoc().categoryKeys
+          && v.scores is map && v.scores.size() > 0
+          && v.scores.keys().hasOnly(eventDoc().criteriaKeys)
+          && v.scores.values().hasOnly([1, 2, 3, 4, 5])
+          && v.notes is string && v.notes.size() <= 2000;
+      }
+      function open() { return eventDoc().status == 'active'; }
+
       match /votes/{voteId} {
         allow read: if signedIn();
-        allow create: if signedIn() && mine(voteId) && validVote(request.resource.data)
-          && officialOk(year, request.resource.data);
-        allow update: if signedIn() && mine(voteId) && validVote(request.resource.data)
-          && unlocked(year, resource.data) && officialOk(year, request.resource.data);
-        allow delete: if signedIn() && mine(voteId) && unlocked(year, resource.data);
+        allow create: if signedIn() && open() && mine(voteId) && validVote(request.resource.data)
+          && officialOk(request.resource.data);
+        allow update: if signedIn() && open() && mine(voteId) && validVote(request.resource.data)
+          && unlocked(resource.data) && officialOk(request.resource.data);
+        allow delete: if signedIn() && open() && mine(voteId) && unlocked(resource.data);
       }
       match /photos/{voteId} {
         allow read: if signedIn();
-        allow create, update: if signedIn() && mine(voteId) && request.resource.data.data.size() < 1000000;
+        allow create, update: if signedIn() && open() && mine(voteId) && request.resource.data.data.size() < 1000000;
         allow delete: if signedIn() && mine(voteId);
       }
       match /sessions/{code} {
         allow read: if signedIn();
-        allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
-        // The host can update the session and hand hosting to any judge in it.
-        // Any judge in the session can take over hosting (only hostUid/hostName, set to themselves).
+        allow create: if signedIn() && open() && request.resource.data.hostUid == request.auth.uid;
+        // The host can update the group and hand hosting to any judge in it.
+        // Any judge in the group can take over hosting (only hostUid/hostName, set to themselves).
         // Nobody can reopen an ended group.
         allow update: if signedIn() && resource.data.get('status', 'active') != 'ended' && (
           (resource.data.hostUid == request.auth.uid
-            && exists(/databases/$(database)/documents/contests/$(year)/sessions/$(code)/judges/$(request.resource.data.hostUid)))
-          || (inGroup(year, code)
+            && exists(/databases/$(database)/documents/events/$(eventId)/sessions/$(code)/judges/$(request.resource.data.hostUid)))
+          || (inGroup(code)
             && request.resource.data.hostUid == request.auth.uid
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostUid', 'hostName'])));
         match /judges/{uid} {
           allow read: if signedIn();
           // Judges join or update only themselves, and only while the group is active.
           allow create, update: if signedIn() && uid == request.auth.uid
-            && get(sessionPath(year, code)).data.get('status', 'active') == 'active';
+            && get(sessionPath(code)).data.get('status', 'active') == 'active';
           allow delete: if signedIn() && (uid == request.auth.uid
-            || get(sessionPath(year, code)).data.hostUid == request.auth.uid);
+            || get(sessionPath(code)).data.hostUid == request.auth.uid);
         }
       }
     }

@@ -24,22 +24,32 @@ async function phone(name, query = '') {
   await page.evaluate(() => { const show = window.toast; window.toast = m => { logToast(m); show(m); }; });
   return page;
 }
-// A host plus judges who joined by tapping the group in the list.
+const appLoaded = p => p.waitForFunction(() => window.TALLY_EVENT && typeof renderAll === 'function' && Cloud.eventId, null, { timeout: 15000 });
+// The host starts the Bellevue preset from the landing page.
+async function startBellevue(host) {
+  host.dialogs.length = 0;
+  await host.click('[data-start="bellevue"]');
+  await appLoaded(host);
+  return host.evaluate(() => Cloud.eventId);
+}
+// A host plus judges who opened the event link and joined the group by tapping it in the list.
 async function group(...names) {
   const host = await phone(names[0]);
+  const eventId = await startBellevue(host);
   await host.click('[data-action="start-session"]');
   await host.waitForFunction(() => Cloud.sessionCode);
   const code = await host.evaluate(() => Cloud.sessionCode);
   const judges = [];
   for (const n of names.slice(1)) {
-    const p = await phone(n);
+    const p = await phone(n, '?event=' + eventId);
+    await appLoaded(p);
     await p.evaluate(() => refreshGroups(true));
     await p.click(`[data-join-group="${code}"]`, { timeout: 10000 });
     await p.waitForFunction(() => Cloud.sessionCode);
     judges.push(p);
   }
   await sleep(800);
-  return { host, judges, code };
+  return { host, judges, code, eventId };
 }
 async function openVoting(host, street, num, cat) {
   await host.evaluate(s => { closeSheet(); openStreet(s); }, street);
@@ -106,27 +116,32 @@ test('standings count official votes from 3 judges only, and list the rest', asy
 });
 
 test('closed votes are locked, and the rules reject forged or out-of-range votes', async () => {
-  const { host, judges: [sam], code } = await group('Alex', 'Sam');
+  const { host, judges: [sam], code, eventId } = await group('Alex', 'Sam');
   await openVoting(host, 'Greycourt Avenue', '1218', 'tree');
   await score(sam, 4, 4);
   await host.click('[data-action="close-voting"]'); await sleep(800);
   await sam.evaluate(() => { openStreet('Greycourt Avenue'); openSheet('1218'); }); await sleep(300);
   assert.match(await text(sam, '#sheet-status'), /locked/);
-  const results = await sam.evaluate(async code => {
-    const F = QUORUM_FB, app = F.initializeApp(QUORUM_FIREBASE, 'probe'), auth = F.getAuth(app);
+  const results = await sam.evaluate(async ([code, eventId]) => {
+    const F = TALLY_FB, app = F.initializeApp(TALLY_FIREBASE, 'probe'), auth = F.getAuth(app);
     F.connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
     const db = F.initializeFirestore(app, {}); F.connectFirestoreEmulator(db, 'localhost', 8080);
     const uid = (await F.signInAnonymously(auth)).user.uid;
-    const vote = { judgeId: uid, category: 'tree', curbAppeal: 3, overallPresentation: 3, uniqueDesign: null, notes: '', address: 'x', total: 3 };
-    const tryWrite = async (id, data) => { try { await F.setDoc(F.doc(db, 'contests', '2026', 'votes', id), data); return 'allowed'; } catch { return 'denied'; } };
+    const vote = { judgeId: uid, category: 'tree', scores: { curb: 3, overall: 3 }, notes: '', address: 'x', total: 3 };
+    const tryWrite = async (id, data) => { try { await F.setDoc(F.doc(db, 'events', eventId, 'votes', id), data); return 'allowed'; } catch { return 'denied'; } };
     return {
       forgedOfficial: await tryWrite(uid + '__a', { ...vote, sessionCode: code, callId: 'made-up' }),
       asSomeoneElse: await tryWrite('other__a', { ...vote, judgeId: 'other' }),
-      scoreOfNine: await tryWrite(uid + '__b', { ...vote, curbAppeal: 9 }),
-      moveTheGroup: await F.updateDoc(F.doc(db, 'contests', '2026', 'sessions', code), { current: null }).then(() => 'allowed', () => 'denied'),
+      scoreOfNine: await tryWrite(uid + '__b', { ...vote, scores: { curb: 9, overall: 3 } }),
+      unknownCriterion: await tryWrite(uid + '__c', { ...vote, scores: { curb: 3, taste: 5 } }),
+      unknownCategory: await tryWrite(uid + '__d', { ...vote, category: 'chili' }),
+      plainVoteAllowed: await tryWrite(uid + '__e', vote),
+      moveTheGroup: await F.updateDoc(F.doc(db, 'events', eventId, 'sessions', code), { current: null }).then(() => 'allowed', () => 'denied'),
+      endSomeoneElsesEvent: await F.updateDoc(F.doc(db, 'events', eventId), { status: 'ended' }).then(() => 'allowed', () => 'denied'),
     };
-  }, code);
-  assert.deepEqual(results, { forgedOfficial: 'denied', asSomeoneElse: 'denied', scoreOfNine: 'denied', moveTheGroup: 'denied' });
+  }, [code, eventId]);
+  assert.deepEqual(results, { forgedOfficial: 'denied', asSomeoneElse: 'denied', scoreOfNine: 'denied', unknownCriterion: 'denied',
+    unknownCategory: 'denied', plainVoteAllowed: 'allowed', moveTheGroup: 'denied', endSomeoneElsesEvent: 'denied' });
   noErrors(host, sam);
 });
 
@@ -173,4 +188,61 @@ test('hosting can be handed off, or taken over by a judge', async () => {
   assert.equal(await pat.evaluate(() => Cloud.isHost()), true);
   assert.equal(await sam.evaluate(() => Cloud.isHost()), false);
   noErrors(host, sam, pat);
+});
+
+test('the landing page lists events in progress, and a second preset start warns first', async () => {
+  const host = await phone('Alex');
+  const eventId = await startBellevue(host);
+  const visitor = await phone('Riley');
+  await visitor.waitForSelector(`[data-open="${eventId}"]`, { timeout: 10000 });
+  assert.match(await text(visitor, '#home-content'), /Bellevue Holiday Lights Competition.*Started by Alex/);
+  visitor.dialogs.length = 0;
+  await visitor.evaluate(() => { window.confirm = m => { window._lastConfirm = m; return false; }; });
+  await visitor.click('[data-start="bellevue"]'); await sleep(300);
+  assert.match(await visitor.evaluate(() => window._lastConfirm), /Alex already started Bellevue Holiday Lights Competition/);
+  assert.equal(await visitor.evaluate(() => !!window.TALLY_EVENT), false, 'cancelling keeps them on the landing page');
+  await visitor.fill('#event-code', eventId.toLowerCase());
+  await visitor.click('[data-home="join-code"]');
+  await appLoaded(visitor);
+  assert.equal(await visitor.evaluate(() => Cloud.eventId), eventId);
+  assert.match(await text(visitor, '#event-name'), /Bellevue Holiday Lights Competition/);
+  noErrors(host, visitor);
+});
+
+test('a new event runs on its own entries, categories, and criteria', async () => {
+  const host = await phone('Morgan');
+  await host.click('[data-home="create"]');
+  await host.fill('#f-name', 'Fall Chili Cook-off');
+  await host.fill('#f-entries', 'Red tent:\nSmoky Joe\nThree Bean\nBlue tent:\nVerde Fuego');
+  await host.fill('#f-cats', 'Best Overall\nHottest - most heat');
+  await host.fill('#f-crit', 'Taste - flavor and balance\nAroma');
+  await host.fill('#f-min', '2');
+  await host.click('[data-home="create-submit"]');
+  await appLoaded(host);
+  const eventId = await host.evaluate(() => Cloud.eventId);
+  assert.match(await text(host, '#street-groups'), /Red tent.*Blue tent/);
+  await host.click('[data-action="start-session"]'); await host.waitForFunction(() => Cloud.sessionCode);
+  const code = await host.evaluate(() => Cloud.sessionCode);
+  const judge = await phone('Casey', '?event=' + eventId);
+  await appLoaded(judge);
+  await judge.evaluate(() => refreshGroups(true));
+  await judge.click(`[data-join-group="${code}"]`, { timeout: 10000 }); await sleep(800);
+  await host.evaluate(() => openStreet('Red tent'));
+  await host.click('[data-house="Smoky Joe"]'); await sleep(200);
+  await host.click('[data-cat="hottest"]'); await host.click('[data-action="call-house"]'); await sleep(1200);
+  assert.equal(await sheetAddr(judge), 'Smoky Joe');
+  assert.match(await text(judge, '#criteria'), /Taste.*flavor and balance.*Aroma/);
+  await judge.click('[data-key="taste"] [data-star="5"]'); await judge.click('[data-key="aroma"] [data-star="4"]');
+  await judge.click('[data-action="save-next"]'); await sleep(900);
+  await host.click('[data-key="taste"] [data-star="3"]'); await host.click('[data-key="aroma"] [data-star="3"]');
+  await host.click('[data-action="save-next"]'); await sleep(900);
+  await host.click('[data-action="close-voting"]'); await sleep(800);
+  await host.click('[data-tab="results"]'); await sleep(600);
+  assert.match(await text(host, '#results-content'), /Hottest.*Smoky Joe 2 votes 3\.8/);
+  // Organizer can end the event; votes are then refused.
+  await host.click('[data-tab="export"]');
+  await host.click('[data-action="end-event"]'); await sleep(1200);
+  await judge.waitForFunction(() => TALLY_EVENT.status === 'ended', null, { timeout: 5000 });
+  assert.equal(await judge.evaluate(() => getComputedStyle(document.getElementById('event-ended')).display), 'block');
+  noErrors(host, judge);
 });

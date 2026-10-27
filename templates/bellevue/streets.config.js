@@ -1,22 +1,12 @@
-// Event settings for Quorum: the Bellevue Holiday Lights Competition.
-// Streets are listed interior first, then boundary. Shared by the app and scripts/build-addresses.mjs.
+// Bellevue Holiday Lights Competition: the street list behind Tally's Bellevue preset.
+// Streets are listed interior first, then boundary. Shared by templates.js and scripts/build-addresses.mjs.
 // edge: which side of the neighborhood a boundary street forms. The importer traces the
 // outline from these and keeps only addresses inside it.
 // range: optional [min, max] house-number filter, if the outline ever needs help.
 // side: on boundary streets only the Bellevue side is judged. Odd/even was checked
 // against map coordinates of neighboring houses.
 // House numbers themselves come from addresses.js (real address points).
-var QUORUM_CONFIG = {
-  // The event being judged (Quorum is the app; this is shown as the title).
-  EVENT_NAME: 'Bellevue Holiday Lights Competition',
-  EVENT_PLACE: 'Richmond, VA',
-  // Contest year. Synced votes are stored per year so seasons never mix.
-  YEAR: 2026,
-  // Change this number to wipe what's saved on each phone (skips, added houses, session)
-  // the next time it opens the site. Bump it once when testing is done.
-  PHONE_DATA_VERSION: 1,
-  // A house places in the standings only once this many judges have scored it in a group.
-  MIN_JUDGES: 3,
+var TALLY_BELLEVUE = {
   // Search box for address points: [west, south, east, north] in lon/lat.
   BBOX: [-77.472, 37.578, -77.438, 37.605],
   STREETS: [
@@ -50,4 +40,4 @@ var QUORUM_CONFIG = {
     { name: 'Westbrook Avenue', boundary: true, edge: 'north', side: 'odd', sideLabel: 'South side' },
   ],
 };
-if (typeof module !== 'undefined') module.exports = QUORUM_CONFIG;
+if (typeof module !== 'undefined') module.exports = TALLY_BELLEVUE;

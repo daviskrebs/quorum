@@ -1,8 +1,8 @@
 // Firebase project settings (Project settings → Your apps → Web app → firebaseConfig).
 // These values are public by design; firestore.rules controls who can read and write.
-// (The project ID predates the Quorum name; Firebase project IDs can't be renamed.)
+// (The project ID predates the Tally name; Firebase project IDs can't be renamed.)
 // Set to null to run without sync: votes then stay on each phone.
-window.QUORUM_FIREBASE = {
+window.TALLY_FIREBASE = {
   apiKey: 'AIzaSyDI-JJRwRDp8BE1Myz1xHtqu2s2YaHk1dg',
   authDomain: 'light-up-the-hood.firebaseapp.com',
   projectId: 'light-up-the-hood',
